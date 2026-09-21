@@ -54,7 +54,7 @@ function App(){
     <aside className={`sidebar ${collapsed?'collapsed':''}`}>
       <div className="brand"><div className="brand-mark"><Activity size={22}/></div><div className="brand-copy"><strong>CityVision <span>AI</span></strong><small>TRAFFIC OPERATIONS</small></div></div>
       <div className="side-status"><span className="live-dot"/> SYSTEM OPERATIONAL <span className="sys-time">LIVE</span></div>
-      <nav>{nav.map(([label,Icon])=><button key={label} onClick={()=>setPage(label)} className={page===label?'active':''} title={collapsed?label:''}><Icon size={18}/><span>{label}</span>{label==='Alerts'&&<b>4</b>}</button>)}</nav>
+      <nav>{nav.map(([label,Icon])=><button key={label} onClick={()=>{setPage(label); if(typeof window !== 'undefined' && window.innerWidth <= 780) setCollapsed(true)}} className={page===label?'active':''} title={collapsed?label:''}><Icon size={18}/><span>{label}</span>{label==='Alerts'&&<b>4</b>}</button>)}</nav>
       <div className="sidebar-footer"><div className="operator"><div className="avatar">AS</div><div><strong>Control Room</strong><small>Operator • Secure</small></div><ChevronDown size={15}/></div></div>
     </aside>
     <button className={`mobile-sidebar-backdrop ${collapsed?'hidden':''}`} aria-label="Close navigation" onClick={()=>setCollapsed(true)}/>
