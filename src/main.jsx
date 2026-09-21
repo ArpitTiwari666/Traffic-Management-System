@@ -45,7 +45,7 @@ const mapNodes = [
 
 function App(){
   const [page,setPage] = useState('Dashboard');
-  const [collapsed,setCollapsed] = useState(false);
+  const [collapsed,setCollapsed] = useState(()=>typeof window !== 'undefined' ? window.innerWidth <= 780 : false);
   const [search,setSearch] = useState('');
   const [live,setLive] = useState(true);
   const [selectedCamera,setSelectedCamera] = useState(null);
@@ -57,6 +57,7 @@ function App(){
       <nav>{nav.map(([label,Icon])=><button key={label} onClick={()=>setPage(label)} className={page===label?'active':''} title={collapsed?label:''}><Icon size={18}/><span>{label}</span>{label==='Alerts'&&<b>4</b>}</button>)}</nav>
       <div className="sidebar-footer"><div className="operator"><div className="avatar">AS</div><div><strong>Control Room</strong><small>Operator • Secure</small></div><ChevronDown size={15}/></div></div>
     </aside>
+    <button className={`mobile-sidebar-backdrop ${collapsed?'hidden':''}`} aria-label="Close navigation" onClick={()=>setCollapsed(true)}/>
     <main className="main">
       <header className="topbar"><button className="icon-btn" onClick={()=>setCollapsed(v=>!v)}><Menu size={19}/></button><div className="crumb"><span>SMART CITY</span><ChevronDown size={13}/><strong>{page}</strong></div><div className="top-actions"><div className="global-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle, camera, location..."/></div><button className="icon-btn"><Bell size={18}/><i/></button><button className="profile-btn"><div className="avatar small">AS</div><span>Admin</span><ChevronDown size={14}/></button></div></header>
       <div className="page-wrap"><AnimatePresence mode="wait"><motion.div key={pageKey} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:.22}}>{renderPage(page,{live,setLive,selectedCamera,setSelectedCamera,setPage})}</motion.div></AnimatePresence></div>

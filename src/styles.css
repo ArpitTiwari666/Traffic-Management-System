@@ -1927,3 +1927,298 @@ tbody tr:hover {
 .trajectory-osm-map .leaflet-control-attribution {
   z-index: 4;
 }
+
+
+/* Mobile / tablet responsive layout */
+.mobile-sidebar-backdrop {
+  display:none;
+}
+
+@media (max-width: 1024px) {
+  .page-wrap {
+    padding:22px 20px 34px;
+  }
+  .topbar {
+    padding:0 18px;
+  }
+  .global-search {
+    width:min(240px,28vw);
+  }
+  .tracking-grid {
+    grid-template-columns:minmax(280px,340px) minmax(0,1fr);
+  }
+  .trajectory-osm-map,
+  .trajectory-map {
+    height:380px !important;
+    min-height:380px;
+  }
+}
+
+@media (max-width: 780px) {
+  .app {
+    min-width:0;
+  }
+
+  /* Turn the desktop sidebar into a mobile drawer. */
+  .sidebar,
+  .sidebar.collapsed {
+    position:fixed;
+    left:0;
+    top:0;
+    bottom:0;
+    width:min(280px, 86vw);
+    height:100vh;
+    transform:translateX(-105%);
+    transition:transform .25s ease, box-shadow .25s ease;
+    z-index:30;
+    box-shadow:none;
+  }
+  .sidebar:not(.collapsed) {
+    transform:translateX(0);
+    box-shadow:18px 0 50px rgba(0,0,0,.35);
+  }
+  .sidebar.collapsed .brand-copy,
+  .sidebar.collapsed .side-status,
+  .sidebar.collapsed nav button span,
+  .sidebar.collapsed nav button b,
+  .sidebar.collapsed .operator>div:not(.avatar),
+  .sidebar.collapsed .operator>svg {
+    display:block;
+  }
+  .sidebar.collapsed .brand-copy,
+  .sidebar.collapsed .side-status,
+  .sidebar.collapsed nav button span,
+  .sidebar.collapsed nav button b,
+  .sidebar.collapsed .operator>div:not(.avatar),
+  .sidebar.collapsed .operator>svg {
+    display:none;
+  }
+  .sidebar:not(.collapsed) .brand-copy,
+  .sidebar:not(.collapsed) .side-status,
+  .sidebar:not(.collapsed) nav button span,
+  .sidebar:not(.collapsed) nav button b,
+  .sidebar:not(.collapsed) .operator>div:not(.avatar),
+  .sidebar:not(.collapsed) .operator>svg {
+    display:block;
+  }
+
+  .mobile-sidebar-backdrop {
+    display:block;
+    position:fixed;
+    inset:0;
+    border:0;
+    padding:0;
+    margin:0;
+    background:rgba(0,0,0,.48);
+    backdrop-filter:blur(2px);
+    z-index:20;
+    cursor:pointer;
+  }
+  .mobile-sidebar-backdrop.hidden {
+    display:none;
+  }
+
+  .main {
+    width:100%;
+    min-width:0;
+  }
+
+  .topbar {
+    height:60px;
+    padding:0 10px;
+    gap:9px;
+  }
+  .topbar .icon-btn {
+    width:36px;
+    height:36px;
+    flex:none;
+  }
+  .crumb {
+    min-width:0;
+    overflow:hidden;
+    white-space:nowrap;
+    gap:6px;
+  }
+  .crumb span,
+  .crumb svg {
+    display:none;
+  }
+  .crumb strong {
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:11px;
+  }
+  .top-actions {
+    gap:6px;
+  }
+  .top-actions .global-search,
+  .top-actions .profile-btn {
+    display:none;
+  }
+
+  .page-wrap {
+    padding:18px 12px 28px;
+    width:100%;
+  }
+
+  .hero,
+  .hero.compact {
+    align-items:flex-start;
+    flex-direction:column;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .hero h1 {
+    font-size:26px;
+    line-height:1.08;
+    letter-spacing:-.7px;
+  }
+  .hero p {
+    font-size:11px;
+    line-height:1.5;
+  }
+  .hero-actions {
+    width:100%;
+  }
+  .hero-actions .btn,
+  .hero-actions .icon-btn {
+    flex:1;
+  }
+
+  .search-card {
+    padding:9px;
+    flex-wrap:wrap;
+    gap:7px;
+  }
+  .search-card>svg {
+    margin-left:2px;
+  }
+  .search-card input {
+    min-width:0;
+    width:calc(100% - 32px);
+    height:36px;
+  }
+  .search-card .btn.primary {
+    flex:1;
+    min-width:0;
+  }
+  .search-card>.icon-btn {
+    flex:none;
+  }
+
+  .tracking-grid {
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+  .vehicle-card,
+  .trajectory-card {
+    width:100%;
+    min-width:0;
+  }
+  .vehicle-card {
+    padding:14px;
+  }
+  .vehicle-visual {
+    margin:12px 0;
+  }
+  .vehicle-specs {
+    gap:7px;
+  }
+  .vehicle-specs>div {
+    min-width:0;
+  }
+  .action-row {
+    flex-direction:column;
+  }
+  .action-row .btn {
+    width:100%;
+  }
+
+  .trajectory-card {
+    padding:14px;
+  }
+  .trajectory-osm-map,
+  .trajectory-map {
+    height:300px !important;
+    min-height:300px;
+    margin-top:8px;
+  }
+  .trajectory-osm-map .leaflet-container {
+    border-radius:11px;
+  }
+  .timeline {
+    grid-template-columns:1fr;
+    gap:7px;
+    margin-top:10px;
+  }
+  .timeline-item {
+    padding:9px 10px;
+  }
+
+  .metrics-grid,
+  .alert-kpis,
+  .reports-grid,
+  .settings-grid,
+  .preview-grid,
+  .dashboard-grid,
+  .analytics-grid,
+  .camera-layout,
+  .camera-management-grid,
+  .gis-layout {
+    grid-template-columns:1fr;
+  }
+
+  .camera-grid {
+    grid-template-columns:1fr;
+  }
+  .side-panel,
+  .gis-side,
+  .infra-side {
+    position:static;
+  }
+  .gis-map {
+    min-height:420px;
+  }
+  .table-card {
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .table-card table {
+    min-width:720px;
+  }
+}
+
+@media (max-width: 420px) {
+  .page-wrap {
+    padding-left:9px;
+    padding-right:9px;
+  }
+  .topbar {
+    padding-left:8px;
+    padding-right:8px;
+  }
+  .hero h1 {
+    font-size:23px;
+  }
+  .card {
+    border-radius:14px;
+  }
+  .trajectory-card,
+  .vehicle-card {
+    padding:12px;
+  }
+  .trajectory-osm-map,
+  .trajectory-map {
+    height:270px !important;
+    min-height:270px;
+  }
+  .vehicle-silhouette {
+    font-size:52px;
+  }
+  .vehicle-specs {
+    grid-template-columns:1fr;
+  }
+  .btn {
+    min-height:38px;
+  }
+}
