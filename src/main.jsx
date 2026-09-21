@@ -35,12 +35,12 @@ const detections = [
   {time:'20:48:09',camera:'CAM-063',location:'MR-10 Corridor',plate:'MP09GH1189',type:'Truck',color:'White',conf:'97.1%'},
 ];
 const mapNodes = [
-  {x:18,y:26,label:'CAM-014',status:'high',name:'Vijay Nagar'},
-  {x:34,y:46,label:'CAM-027',status:'medium',name:'Palasia'},
-  {x:63,y:29,label:'CAM-041',status:'low',name:'Airport Rd'},
-  {x:70,y:61,label:'CAM-063',status:'high',name:'MR-10'},
-  {x:45,y:73,label:'CAM-093',status:'medium',name:'Rau Bypass'},
-  {x:79,y:78,label:'CAM-078',status:'offline',name:'Bhawarkua'},
+  {lat:22.7533,lng:75.8937,label:'CAM-014',status:'high',name:'Vijay Nagar'},
+  {lat:22.7256,lng:75.8860,label:'CAM-027',status:'medium',name:'Palasia'},
+  {lat:22.7268,lng:75.8037,label:'CAM-041',status:'low',name:'Airport Rd'},
+  {lat:22.7350,lng:75.8400,label:'CAM-063',status:'high',name:'MR-10'},
+  {lat:22.6580,lng:75.8150,label:'CAM-093',status:'medium',name:'Rau Bypass'},
+  {lat:22.6867,lng:75.8650,label:'CAM-078',status:'offline',name:'Bhawarkua'},
 ];
 
 function App(){
@@ -84,10 +84,133 @@ function CameraCard({c,i,onSelect}){return <motion.button className="camera-card
 function CameraDetails({c}){return <div className="detail-panel"><div className="panel-head"><div><span className="eyebrow">CAMERA DETAILS</span><h3>{c.id}</h3></div><Pill tone={c.status==='Online'?'green':c.status==='Warning'?'amber':'red'}>{c.status}</Pill></div><div className="detail-map"><MapPinned size={22}/><span>{c.location}</span></div><div className="detail-grid"><div><span>Type</span><b>{c.type}</b></div><div><span>Vehicles / min</span><b>{c.count}</b></div><div><span>Avg. speed</span><b>{c.speed} km/h</b></div><div><span>ANPR</span><b>Enabled</b></div></div><div className="detail-section"><span className="eyebrow">LATEST PLATE</span><div className="plate-big">{c.plate}</div><div className="confidence"><span>Recognition confidence</span><b>98.7%</b></div><div className="confidence-bar"><i style={{width:'98.7%'}}/></div></div></div>}
 
 function VehicleTracking(){const [q,setQ]=useState('MP09AB1234'); const [searched,setSearched]=useState(true); return <section><div className="hero compact"><div><div className="eyebrow accent-text">INVESTIGATION CONSOLE</div><h1>Vehicle Search & Tracking</h1><p>Reconstruct plate trajectories across the city from time-synchronized camera sightings.</p></div></div><div className="search-card card"><Search size={19}/><input value={q} onChange={e=>setQ(e.target.value.toUpperCase())} placeholder="Enter registration number"/><button className="btn primary" onClick={()=>setSearched(true)}><SearchCheck size={15}/>Search Vehicle</button><button className="icon-btn"><Filter size={18}/></button></div>{searched&&<div className="tracking-grid"><div className="card vehicle-card"><div className="panel-head"><div><span className="eyebrow">VEHICLE PROFILE</span><h3>{q||'MP09AB1234'}</h3></div><Pill tone="red">HIGH INTEREST</Pill></div><div className="vehicle-visual"><div className="vehicle-silhouette">🚘</div><div className="plate-big">{q||'MP09AB1234'}</div></div><div className="vehicle-specs"><div><span>Type</span><b>White Sedan</b></div><div><span>First seen</span><b>18:42:09</b></div><div><span>Last seen</span><b>21:14:42</b></div><div><span>Detections</span><b>14</b></div><div><span>Confidence</span><b>98.7%</b></div><div><span>Direction</span><b>North-East</b></div></div><div className="action-row"><button className="btn ghost"><Download size={14}/>Export Trail</button><button className="btn danger"><ShieldAlert size={14}/>Create Alert</button></div></div><div className="card trajectory-card"><SectionHead kicker="SPATIAL-TEMPORAL TRACE" title="Trajectory" action={<Pill tone="green"><span className="live-dot"/> 14 sightings</Pill>}/><TrajectoryMap/><div className="timeline">{['Vijay Nagar','Palasia Square','MR-10 Corridor','Rau Bypass'].map((x,i)=><div key={x} className="timeline-item"><div className="tl-dot">{i+1}</div><div><strong>{x}</strong><span>{['21:14:42','20:51:08','20:31:18','19:58:22'][i]} • CAM-{['014','027','063','093'][i]}</span></div></div>)}</div></div></div>}</section>}
-function TrajectoryMap(){return <div className="trajectory-map"><div className="map-grid"/><div className="route route-main"/><div className="route route-branch"/><div className="route-dot d1"><span>1</span></div><div className="route-dot d2"><span>2</span></div><div className="route-dot d3"><span>3</span></div><div className="route-dot d4"><span>4</span></div><div className="map-label ml1">Vijay Nagar</div><div className="map-label ml2">Palasia</div><div className="map-label ml3">MR-10</div><div className="map-label ml4">Rau Bypass</div></div>}
+function TrajectoryMap(){
+  const mapRef=React.useRef(null);
+  const leafletRef=React.useRef(null);
+  React.useEffect(()=>{
+    let cancelled=false;
+    const cssId='cityvision-leaflet-css';
+    const cssUrl='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    const jsUrl='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    const init=()=>{
+      if(cancelled || !mapRef.current || !window.L || leafletRef.current) return;
+      const L=window.L;
+      const points=[
+        {n:1,name:'Vijay Nagar',camera:'CAM-014',time:'21:14:42',coords:[22.7533,75.8937]},
+        {n:2,name:'Palasia Square',camera:'CAM-027',time:'20:51:08',coords:[22.7256,75.8860]},
+        {n:3,name:'MR-10 Corridor',camera:'CAM-063',time:'20:31:18',coords:[22.7350,75.8400]},
+        {n:4,name:'Rau Bypass',camera:'CAM-093',time:'19:58:22',coords:[22.6580,75.8150]},
+      ];
+      const map=L.map(mapRef.current,{zoomControl:true,attributionControl:true});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+      const route=points.map(p=>p.coords);
+      L.polyline(route,{color:'#57d7ff',weight:5,opacity:.9}).addTo(map);
+      points.forEach(p=>{
+        L.circleMarker(p.coords,{radius:9,color:'#061017',weight:2,fillColor:'#57d7ff',fillOpacity:.95})
+          .bindPopup(`<strong>${p.n}. ${p.name}</strong><br>${p.camera}<br>${p.time}`)
+          .addTo(map);
+      });
+      map.fitBounds(L.latLngBounds(route),{padding:[24,24]});
+      leafletRef.current=map;
+      setTimeout(()=>map.invalidateSize(),0);
+    };
+    if(!document.getElementById(cssId)){
+      const link=document.createElement('link');
+      link.id=cssId; link.rel='stylesheet'; link.href=cssUrl;
+      document.head.appendChild(link);
+    }
+    if(window.L) init();
+    else {
+      const existing=document.querySelector(`script[src="${jsUrl}"]`);
+      if(existing) existing.addEventListener('load',init);
+      else {
+        const script=document.createElement('script');
+        script.src=jsUrl; script.async=true; script.onload=init;
+        document.body.appendChild(script);
+      }
+    }
+    return ()=>{
+      cancelled=true;
+      if(leafletRef.current){leafletRef.current.remove(); leafletRef.current=null;}
+    };
+  },[]);
+  return <div ref={mapRef} className="trajectory-map trajectory-osm-map"/>;
+}
 
-function GISMap(){const [layer,setLayer]=useState('Traffic'); return <section><div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Citywide traffic state, camera network, incidents and vehicle trajectories.</p></div><div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost"><LocateFixed size={15}/>Locate me</button></div></div><div className="gis-layout"><div className="gis-map"><div className="city-grid"/><div className="roads"><i className="road r1"/><i className="road r2"/><i className="road r3"/><i className="road r4"/><i className="road r5"/></div>{mapNodes.map((n,i)=><motion.button whileHover={{scale:1.12}} className={`map-node ${n.status}`} style={{left:n.x+'%',top:n.y+'%'}} key={i} title={n.name}><span/><b>{n.label}</b></motion.button>)}<div className="incident inc1"><TriangleAlert size={14}/></div><div className="incident inc2"><TriangleAlert size={14}/></div><div className="route-trace"><div/><div/><div/></div><div className="map-controls"><button><Map size={16}/></button><button><Layers3 size={16}/></button><button><Maximize2 size={16}/></button></div><div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div></div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>12</b></div><div className="map-stat"><span>Active incidents</span><b>3</b></div><div className="map-stat"><span>Vehicles on network</span><b>4,218</b></div><div className="map-stat"><span>Camera coverage</span><b>95.1%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTE</span><div className="route-card"><Route size={17}/><div><strong>Vijay Nagar → Rau Bypass</strong><span>6.8 km • 18 min • Heavy</span></div></div><div className="route-card"><Route size={17}/><div><strong>Palasia → Airport Road</strong><span>8.2 km • 14 min • Moderate</span></div></div></aside></div></section>}
+function OSMMap({layer,onReady}) {
+  const [ready,setReady]=useState(false);
+  const mapRef = React.useRef(null);
+  const leafletRef = React.useRef(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    const cssId = 'cityvision-leaflet-css';
+    const cssUrl = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    const jsUrl = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    if (!document.getElementById(cssId)) {
+      const link = document.createElement('link');
+      link.id = cssId; link.rel = 'stylesheet'; link.href = cssUrl;
+      document.head.appendChild(link);
+    }
+    const init = () => {
+      if (cancelled || !mapRef.current || !window.L || leafletRef.current) return;
+      const L = window.L;
+      const map = L.map(mapRef.current, { zoomControl:true, attributionControl:true }).setView([22.7350,75.8500], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
+      const markerLayer = L.layerGroup().addTo(map);
+      const routeLayer = L.layerGroup().addTo(map);
+      const incidentLayer = L.layerGroup().addTo(map);
+      leafletRef.current = {map, markerLayer, routeLayer, incidentLayer, L};
+      setReady(true);
+      if (onReady) onReady(() => { map.invalidateSize(); map.locate({setView:true,maxZoom:14}); });
+    };
+    if (window.L) init();
+    else {
+      const script = document.createElement('script');
+      script.src = jsUrl; script.async = true; script.onload = init;
+      document.body.appendChild(script);
+    }
+    return () => { cancelled = true; };
+  }, []);
 
+  React.useEffect(() => {
+    const state = leafletRef.current;
+    if (!state) return;
+    const {L,map,markerLayer,routeLayer,incidentLayer} = state;
+    markerLayer.clearLayers(); routeLayer.clearLayers(); incidentLayer.clearLayers();
+    const color = n => n.status==='high'?'#ff657a':n.status==='medium'?'#ffbf66':n.status==='offline'?'#83939d':'#45e3a7';
+    if (layer==='Traffic' || layer==='Cameras') {
+      mapNodes.forEach(n => L.circleMarker([n.lat,n.lng], {radius:9,color:color(n),fillColor:color(n),fillOpacity:.78,weight:2}).bindPopup(`<strong>${n.label}</strong><br>${n.name}<br>Status: ${n.status}`).addTo(markerLayer));
+    }
+    if (layer==='Traffic' || layer==='Routes') {
+      L.polyline(gisRoute, {color:'#57d7ff',weight:5,opacity:.85}).addTo(routeLayer);
+    }
+    if (layer==='Traffic') {
+      L.circleMarker([22.7350,75.8400], {radius:7,color:'#ff657a',fillColor:'#ff657a',fillOpacity:.9}).bindPopup('<strong>Traffic incident</strong><br>MR-10 Corridor').addTo(incidentLayer);
+      L.circleMarker([22.7050,75.8600], {radius:7,color:'#ffbf66',fillColor:'#ffbf66',fillOpacity:.9}).bindPopup('<strong>Traffic incident</strong><br>Active congestion').addTo(incidentLayer);
+    }
+  }, [layer,ready]);
+
+  return <div ref={mapRef} className="leaflet-map" />;
+}
+
+const gisRoute = [
+  [22.7533,75.8937],[22.7440,75.8910],[22.7350,75.8840],
+  [22.7200,75.8680],[22.7000,75.8480],[22.6800,75.8300],[22.6580,75.8150],
+];
+
+function GISMap(){
+  const [layer,setLayer]=useState('Traffic');
+  const locateRef=React.useRef(null);
+  return <section>
+    <div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Citywide traffic state, camera network, incidents and vehicle trajectories.</p></div>
+      <div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>locateRef.current&&locateRef.current()}><LocateFixed size={15}/>Locate me</button></div>
+    </div>
+    <div className="gis-layout"><div className="gis-map osm-map"><OSMMap layer={layer} onReady={fn=>{locateRef.current=fn}}/>
+      <div className="map-controls"><button title="OpenStreetMap"><Map size={16}/></button><button title="Map layers"><Layers3 size={16}/></button><button title="Fullscreen" onClick={()=>document.querySelector('.osm-map')?.requestFullscreen?.()}><Maximize2 size={16}/></button></div>
+      <div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div>
+    </div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>12</b></div><div className="map-stat"><span>Active incidents</span><b>3</b></div><div className="map-stat"><span>Vehicles on network</span><b>4,218</b></div><div className="map-stat"><span>Camera coverage</span><b>95.1%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTE</span><div className="route-card"><Route size={17}/><div><strong>Vijay Nagar → Rau Bypass</strong><span>6.8 km • 18 min • Heavy</span></div></div><div className="route-card"><Route size={17}/><div><strong>Palasia → Airport Road</strong><span>8.2 km • 14 min • Moderate</span></div></div></aside></div>
+  </section>
+}
 function Analytics(){return <section><div className="hero compact"><div><div className="eyebrow accent-text">NETWORK INTELLIGENCE</div><h1>Traffic Analytics</h1><p>Measure traffic density, speed, bottlenecks and movement trends across camera nodes.</p></div><div className="hero-actions"><button className="btn ghost">Last 24h <ChevronDown size={14}/></button><button className="btn ghost"><Download size={15}/>Export</button></div></div><div className="analytics-grid"><div className="card chart-card xl"><SectionHead kicker="HOURLY VOLUME" title="Vehicles Detected / Hour" action={<Pill tone="blue">Today</Pill>}/><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><BarChart data={hourly}><CartesianGrid stroke="#1d2b34" vertical={false}/><XAxis dataKey="h" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis stroke="#6e7d88" tickLine={false} axisLine={false}/><Tooltip contentStyle={{background:'#0c151b',border:'1px solid #24343f',borderRadius:12}}/><Bar dataKey="v" fill="#57d7ff" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></div><div className="card chart-card"><SectionHead kicker="CONGESTION" title="Weekly Index"/><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><LineChart data={density}><CartesianGrid stroke="#1d2b34" vertical={false}/><XAxis dataKey="name" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis domain={[0,100]} stroke="#6e7d88" tickLine={false} axisLine={false}/><Tooltip contentStyle={{background:'#0c151b',border:'1px solid #24343f',borderRadius:12}}/><Line type="monotone" dataKey="v" stroke="#b18cff" strokeWidth={3} dot={false}/></LineChart></ResponsiveContainer></div></div><div className="card chart-card"><SectionHead kicker="VEHICLE MIX" title="Vehicle Types"/><div className="pie-wrap"><ResponsiveContainer width="52%" height="100%"><PieChart><Pie data={vehicleTypes} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={76} paddingAngle={3}>{vehicleTypes.map((_,i)=><Cell key={i} fill={['#57d7ff','#b18cff','#45e3a7','#ffbf66','#71808d'][i]}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer><div className="pie-legend">{vehicleTypes.map((v,i)=><div key={v.name}><i style={{background:['#57d7ff','#b18cff','#45e3a7','#ffbf66','#71808d'][i]}}/>{v.name}<b>{v.value}%</b></div>)}</div></div></div><div className="card chart-card"><SectionHead kicker="SPEED PROFILE" title="Average Speed"/><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={speedData}><defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#45e3a7" stopOpacity=".22"/><stop offset="100%" stopColor="#45e3a7" stopOpacity="0"/></linearGradient></defs><CartesianGrid stroke="#1d2b34" vertical={false}/><XAxis dataKey="h" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis stroke="#6e7d88" tickLine={false} axisLine={false}/><Tooltip contentStyle={{background:'#0c151b',border:'1px solid #24343f',borderRadius:12}}/><Area type="monotone" dataKey="v" stroke="#45e3a7" strokeWidth={2.5} fill="url(#g2)"/></AreaChart></ResponsiveContainer></div></div><div className="card bottleneck"><SectionHead kicker="TOP BOTTLENECKS" title="Critical Corridors"/><div className="bottle-list">{[['MR-10 / Dewas Naka',92,'9 min delay'],['Vijay Nagar / Ring Rd',84,'7 min delay'],['Palasia / Geeta Bhawan',76,'5 min delay'],['Airport Rd / Super Corridor',69,'4 min delay']].map(([x,v,d])=><div key={x}><div><span>{x}</span><b>{v}</b></div><div className="bar"><i style={{width:v+'%'}}/></div><small>{d}</small></div>)}</div></div></div></section>}
 
 function Alerts(){const [filter,setFilter]=useState('All'); const rows=filter==='All'?alerts:alerts.filter(a=>a.severity===filter); return <section><div className="hero compact"><div><div className="eyebrow accent-text">SECURITY & INCIDENTS</div><h1>Alerts</h1><p>High-priority events detected by the citywide ANPR and traffic intelligence layer.</p></div><div className="hero-actions"><button className="btn ghost"><BellRing size={15}/>Alert rules</button></div></div><div className="alert-kpis"><Metric icon={CircleAlert} label="OPEN" value="6" accent="red"/><Metric icon={TriangleAlert} label="INVESTIGATING" value="5" accent="amber"/><Metric icon={CheckCircle2} label="RESOLVED TODAY" value="42" accent="green"/><Metric icon={ShieldAlert} label="BLACKLIST MATCHES" value="3" accent="violet"/></div><div className="card table-card"><div className="table-toolbar"><div className="segmented">{['All','Critical','High','Medium','Low'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{x}</button>)}</div><button className="btn ghost"><Filter size={15}/>Advanced filters</button></div><table><thead><tr><th>ALERT</th><th>VEHICLE</th><th>SOURCE</th><th>LOCATION</th><th>TIME</th><th>STATUS</th><th/></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><div className="alert-name"><span className={`sev ${a.severity.toLowerCase()}`}/><div><strong>{a.title}</strong><span>{a.id} • {a.severity}</span></div></div></td><td><span className="mono">{a.plate}</span></td><td><span className="mono">{a.camera}</span></td><td>{a.location}</td><td className="mono">{a.time}</td><td><Pill tone={a.status==='Resolved'?'green':a.status==='Investigating'?'amber':'red'}>{a.status}</Pill></td><td><button className="icon-btn small-btn"><Eye size={15}/></button></td></tr>)}</tbody></table></div></section>}
