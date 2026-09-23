@@ -2222,3 +2222,288 @@ tbody tr:hover {
     min-height:38px;
   }
 }
+
+
+/* =========================================================
+   CITYVISION AI — LIGHT LOGIN SCREEN
+   Matches the application's white/light background
+   ========================================================= */
+
+.login-screen {
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 32px 20px;
+  color: #17242b;
+  background: #ffffff;
+}
+
+.login-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  opacity: .45;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(84, 169, 184, .10), transparent 30%),
+    radial-gradient(circle at 88% 78%, rgba(128, 111, 170, .08), transparent 30%),
+    linear-gradient(rgba(31, 73, 84, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 73, 84, .025) 1px, transparent 1px);
+  background-size: auto, auto, 52px 52px, 52px 52px;
+}
+
+.login-screen::after {
+  content: "";
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(77, 169, 184, .055) 0%,
+    rgba(77, 169, 184, .018) 42%,
+    transparent 70%
+  );
+}
+
+.login-card {
+  width: min(100%, 440px);
+  position: relative;
+  overflow: hidden;
+  padding: 34px 36px 32px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid #e4eaed;
+  box-shadow:
+    0 24px 70px rgba(29, 52, 61, .13),
+    0 3px 12px rgba(29, 52, 61, .05);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.login-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(61, 157, 174, .65),
+    transparent
+  );
+}
+
+.login-card > .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+  color: #37899a;
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  font-weight: 750;
+}
+
+.login-card > .eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #40b993;
+  box-shadow: 0 0 10px rgba(64, 185, 147, .35);
+}
+
+.login-brand {
+  padding: 0;
+  margin: 0 0 29px;
+  gap: 13px;
+}
+
+.login-brand .brand-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #edf8fa, #e4f1f4);
+  border: 1px solid #cfe4e8;
+  box-shadow: 0 8px 20px rgba(46, 107, 119, .09);
+}
+
+.login-brand .brand-copy strong {
+  color: #26363d;
+  font-size: 18px;
+}
+
+.login-brand .brand-copy strong span {
+  color: #398fa1;
+}
+
+.login-brand .brand-copy small {
+  color: #8a9ba2;
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  margin-top: 4px;
+}
+
+.login-card h1 {
+  margin: 0;
+  color: #1e2d34;
+  font-size: clamp(30px, 4vw, 36px);
+  line-height: 1.08;
+  letter-spacing: -1px;
+  font-weight: 760;
+}
+
+.login-card > p {
+  margin: 10px 0 28px;
+  color: #829198;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #687a81;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .25px;
+}
+
+.login-card label input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  outline: none;
+  border-radius: 11px;
+  border: 1px solid #d9e2e6;
+  color: #1d3037;
+  background: #fbfcfd;
+  box-shadow: 0 1px 2px rgba(20, 42, 50, .03) inset;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.login-card label input:hover {
+  border-color: #bdcfd5;
+  background: #ffffff;
+}
+
+.login-card label input:focus {
+  border-color: #63aebb;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(82, 165, 181, .10),
+    0 5px 16px rgba(30, 72, 82, .06);
+}
+
+.login-card label input::placeholder {
+  color: #a8b5ba;
+}
+
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -2px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid #f1cdd2;
+  background: #fff5f6;
+  color: #c65e6b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.login-submit {
+  width: 100%;
+  height: 49px;
+  margin-top: 3px;
+  border-radius: 11px;
+  border: 1px solid #398ca0;
+  background: linear-gradient(135deg, #2e7f91 0%, #3b96a8 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05px;
+  box-shadow: 0 10px 24px rgba(46, 127, 145, .18);
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+
+.login-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(46, 127, 145, .24);
+  filter: brightness(1.03);
+}
+
+.login-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-submit:disabled {
+  opacity: .68;
+  cursor: wait;
+}
+
+/* Hide the old demo-account helper even if an older JSX fragment remains. */
+.login-hint {
+  display: none !important;
+}
+
+.login-screen .login-card {
+  animation: cityvisionLoginIn .45s ease-out both;
+}
+
+@keyframes cityvisionLoginIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 560px) {
+  .login-screen {
+    padding: 20px 14px;
+  }
+
+  .login-card {
+    padding: 28px 22px 25px;
+    border-radius: 19px;
+  }
+
+  .login-brand {
+    margin-bottom: 25px;
+  }
+
+  .login-card h1 {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-screen .login-card {
+    animation: none;
+  }
+}
+
