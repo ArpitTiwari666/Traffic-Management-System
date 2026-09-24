@@ -44,31 +44,6 @@ const mapNodes = [
   {lat:22.6867,lng:75.8650,label:'CAM-078',status:'offline',name:'Bhawarkua'},
 ];
 
-function LoginScreen({onLogin}){
-  const [username,setUsername]=useState('admin');
-  const [password,setPassword]=useState('admin123');
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState('');
-  const submit=async e=>{
-    e.preventDefault(); setLoading(true); setError('');
-    try { await login(username.trim(),password); onLogin(); }
-    catch(err){ setError(err.message || 'Unable to sign in'); }
-    finally { setLoading(false); }
-  };
-  return <div className="login-screen">
-    <div className="login-card card">
-      <div className="brand login-brand"><div className="brand-mark"><Activity size={22}/></div><div className="brand-copy"><strong>CityVision <span>AI</span></strong><small>TRAFFIC OPERATIONS</small></div></div>
-      <div className="eyebrow accent-text">SECURE CONTROL ROOM</div><h1>Sign in</h1><p>Connect to the CityVision FastAPI command center.</p>
-      <form onSubmit={submit}>
-        <label>Username<input value={username} onChange={e=>setUsername(e.target.value)} autoComplete="username" /></label>
-        <label>Password<input value={password} onChange={e=>setPassword(e.target.value)} type="password" autoComplete="current-password" /></label>
-        {error && <div className="login-error"><TriangleAlert size={15}/>{error}</div>}
-        <button className="btn primary login-submit" disabled={loading}>{loading?'Connecting…':'Sign in to Command Center'}</button>
-      </form>
-      
-    </div>
-  </div>
-}
 
 function normalizeCamera(c){return { ...c, count:c.vehicles_per_min ?? 0, speed:c.avg_speed_kmh ?? 0, plate:c.last_plate || '—' }}
 function normalizeAlert(a){return { ...a, camera:a.camera_id, time:a.created_at ? new Date(a.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—' }}
@@ -77,10 +52,11 @@ function normalizeDetection(d){return { ...d, time:d.timestamp ? new Date(d.time
 function App(){
   const [page,setPage] = useState('Dashboard');
   const [collapsed,setCollapsed] = useState(()=>typeof window !== 'undefined' ? window.innerWidth <= 780 : false);
-  const [search,setSearch] = useState('');
+  const [globalSearch,setGlobalSearch] = useState('');
+  const [searchOpen,setSearchOpen] = useState(false);
   const [live,setLive] = useState(true);
   const [selectedCamera,setSelectedCamera] = useState(null);
-  const [authenticated,setAuthenticated]=useState(Boolean(getToken()));
+  const [authenticated,setAuthenticated]=useState(true);
   const [loading,setLoading]=useState(Boolean(getToken()));
   const [apiError,setApiError]=useState('');
   const [data,setData]=useState({cameras,detections,alerts,alertKpis:null,summary:null,analytics:null,gis:null,reportPreview:null,settings:null});
@@ -116,7 +92,6 @@ function App(){
     return ()=>clearInterval(timer);
   },[authenticated,live]);
 
-  if (!authenticated) return <LoginScreen onLogin={()=>setAuthenticated(true)}/>;
 
   const pageKey = page;
   const currentUser=JSON.parse(localStorage.getItem('cityvision_user') || '{"username":"admin","role":"ADMIN"}');
@@ -129,7 +104,7 @@ function App(){
     </aside>
     <button className={`mobile-sidebar-backdrop ${collapsed?'hidden':''}`} aria-label="Close navigation" onClick={()=>setCollapsed(true)}/>
     <main className="main">
-      <header className="topbar"><button className="icon-btn" onClick={()=>setCollapsed(v=>!v)}><Menu size={19}/></button><div className="crumb"><span>SMART CITY</span><ChevronDown size={13}/><strong>{page}</strong></div><div className="top-actions"><div className="global-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search vehicle, camera, location..."/></div><button className="icon-btn"><Bell size={18}/><i/></button><button className="profile-btn" onClick={()=>{clearToken();setAuthenticated(false)}}><div className="avatar small">{(currentUser.username||'AD').slice(0,2).toUpperCase()}</div><span>{currentUser.username || 'Admin'}</span><LogOut size={14}/></button></div></header>
+      <header className="topbar"><button className="icon-btn" onClick={()=>setCollapsed(v=>!v)}><Menu size={19}/></button><div className="crumb"><span>SMART CITY</span><ChevronDown size={13}/><strong>{page}</strong></div><div className="top-actions"><div className="global-search nav-search"><Search size={16}/><input value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&globalSearch.trim()){setPage('GIS Traffic Map');const query=globalSearch.trim();setTimeout(()=>window.dispatchEvent(new CustomEvent('cityvision:location-search',{detail:{query}})),0);}}} placeholder="Search city, area or road..."/><button className="search-close" onClick={()=>setGlobalSearch('')} aria-label="Clear search">×</button></div><button className="icon-btn nav-search-btn active" aria-label="Search city, area or road" title="Search city, area or road"><Search size={18}/></button><button className="icon-btn"><Bell size={18}/><i/></button><button className="profile-btn" onClick={()=>{clearToken();setAuthenticated(false)}}><div className="avatar small">{(currentUser.username||'AD').slice(0,2).toUpperCase()}</div><span>{currentUser.username || 'Admin'}</span><LogOut size={14}/></button></div></header>
       <div className="page-wrap">
         {apiError && <div className="backend-banner"><TriangleAlert size={15}/><span>Backend: {apiError}</span><button onClick={loadData}>Retry</button></div>}
         {loading && <div className="backend-loading"><RefreshCw size={14}/> Syncing live backend data…</div>}
@@ -178,9 +153,9 @@ function CameraCard({c,i,onSelect}){return <motion.button className="camera-card
 function CameraDetails({c}){return <div className="detail-panel"><div className="panel-head"><div><span className="eyebrow">CAMERA DETAILS</span><h3>{c.id}</h3></div><Pill tone={c.status==='Online'?'green':c.status==='Warning'?'amber':'red'}>{c.status}</Pill></div><div className="detail-map"><MapPinned size={22}/><span>{c.location}</span></div><div className="detail-grid"><div><span>Type</span><b>{c.type}</b></div><div><span>Vehicles / min</span><b>{c.count}</b></div><div><span>Avg. speed</span><b>{c.speed} km/h</b></div><div><span>ANPR</span><b>Enabled</b></div></div><div className="detail-section"><span className="eyebrow">LATEST PLATE</span><div className="plate-big">{c.plate}</div><div className="confidence"><span>Recognition confidence</span><b>98.7%</b></div><div className="confidence-bar"><i style={{width:'98.7%'}}/></div></div></div>}
 
 function VehicleTracking(){
-  const [q,setQ]=useState('MP09AB1234'); const [profile,setProfile]=useState(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(false);
+  const [q,setQ]=useState('MP09GD2713'); const [profile,setProfile]=useState(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(false);
   const searchVehicle=async()=>{setLoading(true);setError('');try{setProfile(await apiFetch(`/api/vehicles/search/${encodeURIComponent(q.trim())}`));}catch(e){setProfile(null);setError(e.message);}finally{setLoading(false)}};
-  return <section><div className="hero compact"><div><div className="eyebrow accent-text">INVESTIGATION CONSOLE</div><h1>Vehicle Search & Tracking</h1><p>Search the backend detection history and reconstruct plate trajectories.</p></div></div><div className="search-card card"><Search size={19}/><input value={q} onChange={e=>setQ(e.target.value.toUpperCase())} placeholder="Enter registration number"/><button className="btn primary" onClick={searchVehicle} disabled={loading}><SearchCheck size={15}/>{loading?'Searching…':'Search Vehicle'}</button><button className="icon-btn" onClick={()=>setQ('MP09AB1234')}><RefreshCw size={18}/></button></div>{error&&<div className="backend-banner"><TriangleAlert size={15}/><span>{error}</span></div>}{profile&&<div className="tracking-grid"><div className="card vehicle-card"><div className="panel-head"><div><span className="eyebrow">VEHICLE PROFILE</span><h3>{profile.plate}</h3></div><Pill tone={profile.is_blacklisted?'red':'green'}>{profile.is_blacklisted?'BLACKLISTED':'CLEAR'}</Pill></div><div className="vehicle-visual"><div className="vehicle-silhouette">🚘</div><div className="plate-big">{profile.plate}</div></div><div className="vehicle-specs"><div><span>Type</span><b>{profile.vehicle_type}</b></div><div><span>Color</span><b>{profile.color}</b></div><div><span>First seen</span><b>{profile.first_seen?new Date(profile.first_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Last seen</span><b>{profile.last_seen?new Date(profile.last_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Detections</span><b>{profile.detection_count}</b></div><div><span>Confidence</span><b>{profile.avg_confidence}%</b></div></div><div className="action-row"><button className="btn ghost"><Download size={14}/>Export Trail</button><button className="btn danger"><ShieldAlert size={14}/>Create Alert</button></div></div><div className="card trajectory-card"><SectionHead kicker="SPATIAL-TEMPORAL TRACE" title="Trajectory" action={<Pill tone="green"><span className="live-dot"/> {profile.trajectory.length} sightings</Pill>}/><TrajectoryMap points={profile.trajectory}/><div className="timeline">{profile.trajectory.map((x,i)=><div key={`${x.camera_id}-${i}`} className="timeline-item"><div className="tl-dot">{x.n}</div><div><strong>{x.location}</strong><span>{new Date(x.timestamp).toLocaleTimeString('en-IN')} • {x.camera_id}</span></div></div>)}</div></div></div>}</section>
+  return <section><div className="hero compact"><div><div className="eyebrow accent-text">INVESTIGATION CONSOLE</div><h1>Vehicle Search & Tracking</h1><p>Search the backend detection history and reconstruct plate trajectories.</p></div></div><div className="search-card card"><Search size={19}/><input value={q} onChange={e=>setQ(e.target.value.toUpperCase())} placeholder="Enter registration number"/><button className="btn primary" onClick={searchVehicle} disabled={loading}><SearchCheck size={15}/>{loading?'Searching…':'Search Vehicle'}</button><button className="icon-btn" onClick={()=>setQ('MP09GD2713')}><RefreshCw size={18}/></button></div>{error&&<div className="backend-banner"><TriangleAlert size={15}/><span>{error}</span></div>}{profile&&<div className="tracking-grid"><div className="card vehicle-card"><div className="panel-head"><div><span className="eyebrow">VEHICLE PROFILE</span><h3>{profile.plate}</h3></div><Pill tone={profile.is_blacklisted?'red':'green'}>{profile.is_blacklisted?'BLACKLISTED':'CLEAR'}</Pill></div><div className="vehicle-visual"><div className="vehicle-silhouette">🚘</div><div className="plate-big">{profile.plate}</div></div><div className="vehicle-specs"><div><span>Type</span><b>{profile.vehicle_type}</b></div><div><span>Color</span><b>{profile.color}</b></div><div><span>First seen</span><b>{profile.first_seen?new Date(profile.first_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Last seen</span><b>{profile.last_seen?new Date(profile.last_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Detections</span><b>{profile.detection_count}</b></div><div><span>Confidence</span><b>{profile.avg_confidence}%</b></div></div><div className="action-row"><button className="btn ghost"><Download size={14}/>Export Trail</button><button className="btn danger"><ShieldAlert size={14}/>Create Alert</button></div></div><div className="card trajectory-card"><SectionHead kicker="SPATIAL-TEMPORAL TRACE" title="Trajectory" action={<Pill tone="green"><span className="live-dot"/> {profile.trajectory.length} sightings</Pill>}/><TrajectoryMap points={profile.trajectory}/><div className="timeline">{profile.trajectory.map((x,i)=><div key={`${x.camera_id}-${i}`} className="timeline-item"><div className="tl-dot">{x.n}</div><div><strong>{x.location}</strong><span>{new Date(x.timestamp).toLocaleTimeString('en-IN')} • {x.camera_id}</span></div></div>)}</div></div></div>}</section>
 }
 
 function TrajectoryMap({points=[]}){
@@ -231,7 +206,7 @@ function TrajectoryMap({points=[]}){
   return <div ref={mapRef} className="trajectory-map trajectory-osm-map"/>;
 }
 
-function OSMMap({layer,onReady,nodes=[]}) {
+function OSMMap({layer,onReady,nodes=[],searchQuery=''}) {
   const [ready,setReady]=useState(false);
   const mapRef = React.useRef(null);
   const leafletRef = React.useRef(null);
@@ -284,6 +259,14 @@ function OSMMap({layer,onReady,nodes=[]}) {
     }
   }, [layer,ready,nodes]);
 
+  useEffect(()=>{
+    const mapState=leafletRef.current;
+    const q=(searchQuery||'').trim().toLowerCase();
+    if(!mapState || !q) return;
+    const match=nodes.find(n=>[n.name,n.label,n.camera_id,n.location].filter(Boolean).some(v=>String(v).toLowerCase().includes(q)));
+    if(match) mapState.map.setView([match.lat,match.lng],15,{animate:true});
+  },[searchQuery,nodes]);
+
   return <div ref={mapRef} className="leaflet-map" />;
 }
 
@@ -293,9 +276,10 @@ const gisRoute = [
 ];
 
 function GISMap({data}){
-  const [layer,setLayer]=useState('Traffic'); const locateRef=React.useRef(null);
+  const [layer,setLayer]=useState('Traffic'); const [locationSearch,setLocationSearch]=useState(''); const locateRef=React.useRef(null);
+  useEffect(()=>{ const handler=e=>setLocationSearch(e.detail?.query||''); window.addEventListener('cityvision:location-search',handler); return ()=>window.removeEventListener('cityvision:location-search',handler); },[]);
   const snapshot=data.gis; const nodes=(snapshot?.nodes||[]).map(n=>({lat:n.lat,lng:n.lng,label:n.camera_id,status:n.status,name:n.name}));
-  return <section><div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Live network snapshot and camera nodes from the FastAPI GIS service.</p></div><div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>locateRef.current&&locateRef.current()}><LocateFixed size={15}/>Locate me</button></div></div><div className="gis-layout"><div className="gis-map osm-map"><OSMMap layer={layer} nodes={nodes.length?nodes:mapNodes} onReady={fn=>{locateRef.current=fn}}/><div className="map-controls"><button title="OpenStreetMap"><Map size={16}/></button><button title="Map layers"><Layers3 size={16}/></button><button title="Fullscreen" onClick={()=>document.querySelector('.osm-map')?.requestFullscreen?.()}><Maximize2 size={16}/></button></div><div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div></div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>{snapshot?.congested_corridors??'—'}</b></div><div className="map-stat"><span>Active incidents</span><b>{snapshot?.active_incidents??'—'}</b></div><div className="map-stat"><span>Vehicles on network</span><b>{snapshot?.vehicles_on_network?.toLocaleString()??'—'}</b></div><div className="map-stat"><span>Camera coverage</span><b>{snapshot?.camera_coverage_pct??'—'}%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTES</span>{(snapshot?.routes||[]).map(r=><div className="route-card" key={r.name}><Route size={17}/><div><strong>{r.name}</strong><span>{r.distance_km} km • {r.eta_minutes} min • {r.congestion}</span></div></div>)}</aside></div></section>
+  return <section><div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Live network snapshot and camera nodes from the FastAPI GIS service.</p></div><div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>locateRef.current&&locateRef.current()}><LocateFixed size={15}/>Locate me</button></div></div><div className="gis-layout"><div className="gis-map osm-map"><OSMMap layer={layer} nodes={nodes.length?nodes:mapNodes} searchQuery={locationSearch} onReady={fn=>{locateRef.current=fn}}/><div className="map-controls"><button title="OpenStreetMap"><Map size={16}/></button><button title="Map layers"><Layers3 size={16}/></button><button title="Fullscreen" onClick={()=>document.querySelector('.osm-map')?.requestFullscreen?.()}><Maximize2 size={16}/></button></div><div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div></div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>{snapshot?.congested_corridors??'—'}</b></div><div className="map-stat"><span>Active incidents</span><b>{snapshot?.active_incidents??'—'}</b></div><div className="map-stat"><span>Vehicles on network</span><b>{snapshot?.vehicles_on_network?.toLocaleString()??'—'}</b></div><div className="map-stat"><span>Camera coverage</span><b>{snapshot?.camera_coverage_pct??'—'}%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTES</span>{(snapshot?.routes||[]).map(r=><div className="route-card" key={r.name}><Route size={17}/><div><strong>{r.name}</strong><span>{r.distance_km} km • {r.eta_minutes} min • {r.congestion}</span></div></div>)}</aside></div></section>
 }
 
 function Analytics({data}){

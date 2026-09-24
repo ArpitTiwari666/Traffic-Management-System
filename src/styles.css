@@ -2507,3 +2507,51 @@ tbody tr:hover {
   }
 }
 
+
+/* Global navigation search - always visible */
+.nav-search {
+  width: min(52vw, 680px);
+  min-width: 360px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid rgba(105, 178, 198, .42);
+  border-radius: 14px;
+  background: #07151b;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025), 0 8px 24px rgba(0,0,0,.16);
+}
+.nav-search input {
+  color: #e6f2f6;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 16px;
+}
+.nav-search > svg { color: rgba(181, 208, 216, .68); flex: 0 0 auto; }
+.nav-search input::placeholder { color: rgba(221, 236, 242, .62); }
+.search-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: #71838d;
+  font-size: 30px;
+  line-height: 24px;
+  cursor: pointer;
+  padding: 0;
+}
+.search-close:hover { color: #e6f6fa; }
+.nav-search-btn.active {
+  color: var(--cyan);
+  border-color: #315766;
+  background: #0d2029;
+  box-shadow: 0 0 18px rgba(87,215,255,.10);
+}
+@media (max-width: 760px) {
+  .nav-search { width: min(48vw, 520px); min-width: 240px; }
+}
