@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "https://cityvision-backend-a18f.onrender.com";
 
 const TOKEN_KEY = "cityvision_token";
 
@@ -93,8 +93,10 @@ export async function apiFetch(path, options = {}) {
 }
 
 export function wsUrl(path = "/ws/feed") {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//127.0.0.1:8000${path}`;
+  const protocol =
+    window.location.protocol === "https:" ? "wss:" : "ws:";
+
+  return `${protocol}//cityvision-backend-a18f.onrender.com${path}`;
 }
 
 export { API_BASE };
