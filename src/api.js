@@ -8,11 +8,12 @@ const API_BASE_URL =
   "https://cityvision-backend-a18f.onrender.com";
 
 
-// ------------------------------------------------------------
-// Token management
-// ------------------------------------------------------------
+// ============================================================
+// Token Management
+// ============================================================
 
 const TOKEN_KEY = "cityvision_token";
+const USER_KEY = "cityvision_user";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -28,12 +29,30 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+export function getStoredUser() {
+  const user = localStorage.getItem(USER_KEY);
 
-// ------------------------------------------------------------
+  if (!user) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(user);
+  } catch {
+    return null;
+  }
+}
+
+export function clearUser() {
+  localStorage.removeItem(USER_KEY);
+}
+
+
+// ============================================================
 // Build API URL
-// ------------------------------------------------------------
+// ============================================================
 
-function buildUrl(path) {
+function buildUrl(path = "") {
   if (!path) {
     return API_BASE_URL;
   }
@@ -43,7 +62,6 @@ function buildUrl(path) {
     return path;
   }
 
-  // Make sure there is exactly one slash
   const normalizedPath = path.startsWith("/")
     ? path
     : `/${path}`;
@@ -52,26 +70,29 @@ function buildUrl(path) {
 }
 
 
-// ------------------------------------------------------------
-// Common API request
-// ------------------------------------------------------------
+// ============================================================
+// Common API Request
+// ============================================================
 
 export async function apiFetch(path, options = {}) {
   const url = buildUrl(path);
-
   const token = getToken();
 
   const headers = {
     Accept: "application/json",
-    ...options.headers,
+    ...(options.headers || {}),
   };
 
-  // Only add JSON content type when a body exists
-  if (options.body && !headers["Content-Type"]) {
+  // Add JSON content type only when a body exists.
+  if (
+    options.body &&
+    !headers["Content-Type"] &&
+    !headers["content-type"]
+  ) {
     headers["Content-Type"] = "application/json";
   }
 
-  // Send authentication token when available
+  // Add authentication token when available.
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -85,17 +106,20 @@ export async function apiFetch(path, options = {}) {
       mode: "cors",
     });
   } catch (error) {
+    console.error("CityVision API connection error:", error);
+
     throw new Error(
       `Unable to connect to CityVision backend at ${API_BASE_URL}`
     );
   }
 
-  // ----------------------------------------------------------
-  // Handle unauthorized requests
-  // ----------------------------------------------------------
+  // ==========================================================
+  // Unauthorized
+  // ==========================================================
 
   if (response.status === 401) {
     clearToken();
+    clearUser();
 
     window.dispatchEvent(
       new CustomEvent("cityvision:unauthorized")
@@ -104,9 +128,9 @@ export async function apiFetch(path, options = {}) {
     throw new Error("Session expired. Please login again.");
   }
 
-  // ----------------------------------------------------------
-  // Handle other HTTP errors
-  // ----------------------------------------------------------
+  // ==========================================================
+  // Other HTTP errors
+  // ==========================================================
 
   if (!response.ok) {
     let message = `API request failed (${response.status})`;
@@ -120,15 +144,15 @@ export async function apiFetch(path, options = {}) {
         errorData?.error ||
         message;
     } catch {
-      // Response was not JSON
+      // Response was not JSON.
     }
 
     throw new Error(message);
   }
 
-  // ----------------------------------------------------------
-  // Handle empty responses
-  // ----------------------------------------------------------
+  // ==========================================================
+  // Empty response
+  // ==========================================================
 
   if (response.status === 204) {
     return null;
@@ -147,48 +171,66 @@ export async function apiFetch(path, options = {}) {
 }
 
 
-// ------------------------------------------------------------
+// ============================================================
 // Login
-// ------------------------------------------------------------
+// ============================================================
 
 export async function login(username, password) {
-  const response = await fetch(
-    buildUrl("/api/auth/login"),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      mode: "cors",
-      body: JSON.stringify({
-        username,
-        password,
-      }),
-    }
-  );
+  let response;
+
+  try {
+    response = await fetch(
+      buildUrl("/api/auth/login"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        mode: "cors",
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      }
+    );
+  } catch (error) {
+    console.error("CityVision login connection error:", error);
+
+    throw new Error(
+      `Unable to connect to CityVision backend at ${API_BASE_URL}`
+    );
+  }
+
+  // ==========================================================
+  // Login failed
+  // ==========================================================
 
   if (!response.ok) {
     let message = "Login failed";
 
     try {
-      const data = await response.json();
+      const errorData = await response.json();
 
       message =
-        data?.detail ||
-        data?.message ||
-        data?.error ||
+        errorData?.detail ||
+        errorData?.message ||
+        errorData?.error ||
         message;
     } catch {
-      // Ignore invalid JSON response
+      // Ignore invalid/non-JSON response.
     }
 
     throw new Error(message);
   }
 
+  // ==========================================================
+  // Read login response
+  // ==========================================================
+
   const data = await response.json();
 
-  // Support common FastAPI token response formats
+  // Support common FastAPI authentication formats.
   const token =
     data?.access_token ||
     data?.token ||
@@ -199,18 +241,30 @@ export async function login(username, password) {
     setToken(token);
   }
 
-  // Store user information if supplied
+  // ==========================================================
+  // Store user information
+  // ==========================================================
+
   if (data?.user) {
     localStorage.setItem(
-      "cityvision_user",
+      USER_KEY,
       JSON.stringify(data.user)
     );
   } else if (data?.username) {
     localStorage.setItem(
-      "cityvision_user",
+      USER_KEY,
       JSON.stringify({
         username: data.username,
         role: data.role || "ADMIN",
+      })
+    );
+  } else {
+    // Fallback user object
+    localStorage.setItem(
+      USER_KEY,
+      JSON.stringify({
+        username,
+        role: data?.role || "ADMIN",
       })
     );
   }
@@ -219,14 +273,30 @@ export async function login(username, password) {
 }
 
 
-// ------------------------------------------------------------
+// ============================================================
+// Logout
+// ============================================================
+
+export function logout() {
+  clearToken();
+  clearUser();
+
+  window.dispatchEvent(
+    new CustomEvent("cityvision:logout")
+  );
+}
+
+
+// ============================================================
 // WebSocket URL
-// ------------------------------------------------------------
+// ============================================================
 
 export function wsUrl(path = "") {
-  const normalizedPath = path.startsWith("/")
-    ? path
-    : `/${path}`;
+  const normalizedPath = path
+    ? path.startsWith("/")
+      ? path
+      : `/${path}`
+    : "";
 
   const wsBase = API_BASE_URL.replace(
     /^https?:\/\//i,
@@ -240,26 +310,39 @@ export function wsUrl(path = "") {
 }
 
 
-// ------------------------------------------------------------
-// Backend health check
-// ------------------------------------------------------------
+// ============================================================
+// Backend Health Check
+// ============================================================
 
 export async function checkHealth() {
   return apiFetch("/api/health");
 }
 
 
-// ------------------------------------------------------------
-// Default export
-// ------------------------------------------------------------
+// ============================================================
+// Root Backend Check
+// ============================================================
+
+export async function checkBackend() {
+  return apiFetch("/");
+}
+
+
+// ============================================================
+// Default Export
+// ============================================================
 
 export default {
   API_BASE_URL,
   apiFetch,
   login,
+  logout,
   getToken,
   setToken,
   clearToken,
+  getStoredUser,
+  clearUser,
   wsUrl,
   checkHealth,
+  checkBackend,
 };
