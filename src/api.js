@@ -1,27 +1,21 @@
 // src/api.js
 
 // ============================================================
-// CITYVISION AI - API CONFIGURATION
+// CityVision AI API Configuration
 // ============================================================
 
-// Production backend on Render
-const PRODUCTION_API = "https://cityvision-backend-a18f.onrender.com";
+const LOCAL_API_BASE = "http://127.0.0.1:8000";
+const PRODUCTION_API_BASE = "https://cityvision-backend-a18f.onrender.com";
 
-// Local backend for development
-const LOCAL_API = "http://127.0.0.1:8000";
-
-// Use Render when the frontend is deployed.
-// Use localhost when running the frontend locally.
-const API_BASE =
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1"
-    ? LOCAL_API
-    : PRODUCTION_API;
+// Automatically use Render in production and localhost during development.
+export const API_BASE = import.meta.env.PROD
+  ? PRODUCTION_API_BASE
+  : LOCAL_API_BASE;
 
 const TOKEN_KEY = "cityvision_token";
 
 // ============================================================
-// AUTH TOKEN
+// Authentication Token
 // ============================================================
 
 export function getToken() {
@@ -33,7 +27,7 @@ export function clearToken() {
 }
 
 // ============================================================
-// LOGIN
+// Login
 // ============================================================
 
 export async function login(username, password) {
@@ -57,7 +51,7 @@ export async function login(username, password) {
       const data = await response.json();
       message = data.detail || message;
     } catch {
-      // Ignore invalid JSON response
+      // Ignore JSON parsing errors
     }
 
     throw new Error(message);
@@ -73,7 +67,7 @@ export async function login(username, password) {
 }
 
 // ============================================================
-// GENERIC API REQUEST
+// Generic API Request
 // ============================================================
 
 export async function apiFetch(path, options = {}) {
@@ -83,12 +77,11 @@ export async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  // Add JWT token when available
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // Automatically convert normal JS objects to JSON
+  // Automatically encode normal JS objects as JSON.
   if (
     options.body &&
     typeof options.body === "object" &&
@@ -96,7 +89,6 @@ export async function apiFetch(path, options = {}) {
     !(options.body instanceof URLSearchParams)
   ) {
     headers["Content-Type"] = "application/json";
-
     options = {
       ...options,
       body: JSON.stringify(options.body),
@@ -111,13 +103,12 @@ export async function apiFetch(path, options = {}) {
       headers,
     });
   } catch (error) {
-    // Network/CORS/server unavailable
     throw new Error(
       `Unable to connect to CityVision backend at ${API_BASE}`
     );
   }
 
-  // Authentication expired
+  // Token expired / authentication required.
   if (response.status === 401) {
     clearToken();
   }
@@ -127,21 +118,14 @@ export async function apiFetch(path, options = {}) {
 
     try {
       const data = await response.json();
-
-      if (data?.detail) {
-        message =
-          typeof data.detail === "string"
-            ? data.detail
-            : JSON.stringify(data.detail);
-      }
+      message = data.detail || data.message || message;
     } catch {
-      // Ignore invalid JSON response
+      // Ignore JSON parsing errors
     }
 
     throw new Error(message);
   }
 
-  // No content
   if (response.status === 204) {
     return null;
   }
@@ -150,49 +134,23 @@ export async function apiFetch(path, options = {}) {
 }
 
 // ============================================================
-// WEBSOCKET
+// WebSocket
 // ============================================================
 
 export function wsUrl(path = "/ws/feed") {
-  const isLocal =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
+  const production = import.meta.env.PROD;
 
-  if (isLocal) {
-    return `ws://127.0.0.1:8000${path}`;
+  if (production) {
+    return `wss://cityvision-backend-a18f.onrender.com${path}`;
   }
 
-  // Render uses HTTPS, therefore WebSocket must use WSS
-  return `wss://cityvision-backend-a18f.onrender.com${path}`;
+  return `ws://127.0.0.1:8000${path}`;
 }
 
 // ============================================================
-// API ENDPOINT HELPERS
+// Health Check
 // ============================================================
 
-export const API_ENDPOINTS = {
-  health: "/api/health",
-
-  login: "/api/auth/login",
-
-  dashboard: {
-    summary: "/api/dashboard/summary",
-    activityFeed: "/api/dashboard/activity-feed",
-  },
-
-  cameras: "/api/cameras",
-  vehicles: "/api/vehicles",
-  gis: "/api/gis",
-  analytics: "/api/analytics",
-  alerts: "/api/alerts",
-  reports: "/api/reports",
-  settings: "/api/settings",
-
-  websocket: "/ws/feed",
-};
-
-// ============================================================
-// EXPORT
-// ============================================================
-
-export { API_BASE };
+export async function healthCheck() {
+  return apiFetch("/api/health");
+}
