@@ -2553,5 +2553,29 @@ tbody tr:hover {
   box-shadow: 0 0 18px rgba(87,215,255,.10);
 }
 @media (max-width: 760px) {
-  .nav-search { width: min(48vw, 520px); min-width: 240px; }
+  /*
+   * Mobile search opens as an overlay instead of taking space
+   * inside the header flex row. This keeps the notification,
+   * profile and other header controls in their existing positions.
+   */
+  .nav-search {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 72px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
+    z-index: 20;
+  }
+
+  .topbar {
+    overflow: visible;
+  }
+
+  .top-actions {
+    min-width: 0;
+    flex-shrink: 0;
+  }
 }
