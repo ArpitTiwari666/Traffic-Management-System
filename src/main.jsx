@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { LayoutDashboard, Video, Search, MapPinned, BarChart3, BellRing, Camera, FileText, Settings as SettingsIcon, Menu, ChevronDown, Activity, CarFront, Gauge, CircleAlert, Wifi, WifiOff, SlidersHorizontal, Maximize2, MoreHorizontal, Crosshair, Map, Layers3, Route, Radio, ShieldAlert, Download, FileDown, RefreshCw, UserRound, LockKeyhole, MapIcon, Server, MonitorCog, Palette, CircleHelp, CheckCircle2, TriangleAlert, XCircle, Clock3, Navigation, Database, Zap, Eye, Filter, ArrowUpRight, ArrowDownRight, SunMedium, MoonStar, Bell, LogOut, SearchCheck, Fingerprint, Network, LocateFixed } from 'lucide-react';
 import './styles.css';
-import { apiFetch, clearToken, getToken, login, wsUrl } from './api.js';
 
 const nav = [
   ['Dashboard', LayoutDashboard], ['Live Camera Feed', Video], ['Vehicle Search & Tracking', Search], ['GIS Traffic Map', MapPinned], ['Traffic Analytics', BarChart3], ['Alerts', BellRing], ['Camera Management', Camera], ['Reports', FileText], ['Settings', SettingsIcon],
@@ -45,6 +44,86 @@ const mapNodes = [
 ];
 
 
+const demoSummary = {
+  active_cameras: 312,
+  vehicles_detected_today: 18420,
+  avg_speed_kmh: 38,
+  active_alerts: 4,
+  congestion_index: 68,
+  congestion_label: 'Moderate',
+  network_coverage_pct: 96,
+  camera_status_breakdown: { Online: 312, Warning: 9, Offline: 7 },
+};
+
+const demoAnalytics = {
+  hourly_volume: trafficTrend.map(x => ({ label: x.t.replace(':00',''), value: x.v })),
+  bottlenecks: [
+    { corridor:'Vijay Nagar Junction', index:82, delay:'+14 min delay' },
+    { corridor:'MR-10 Corridor', index:74, delay:'+11 min delay' },
+    { corridor:'Palasia Square', index:61, delay:'+8 min delay' },
+  ],
+};
+
+const demoAlertKpis = { open:2, investigating:1, resolved_today:1, blacklist_matches:1 };
+
+const demoReportPreview = {
+  title:'Daily Traffic Intelligence',
+  vehicles_detected:18420,
+  peak_volume_per_hr:2280,
+  avg_speed_kmh:38,
+  alerts_triggered:4,
+  trend:trafficTrend,
+};
+
+const demoSettings = {
+  operations_mode:'Demo / Simulation',
+  data_refresh_seconds:12,
+  security_level:'Standard',
+  default_map_layers:['Traffic','Cameras','Incidents'],
+};
+
+const demoData = {
+  cameras: cameras.map((c,i)=>({
+    ...c,
+    health_pct: c.status==='Online' ? 98 : c.status==='Warning' ? 82 : 0,
+    ip_address:`192.168.10.${14+i}`,
+    last_active:new Date(Date.now()-i*60000).toISOString(),
+  })),
+  detections,
+  alerts,
+  alertKpis:demoAlertKpis,
+  summary:demoSummary,
+  analytics:demoAnalytics,
+  gis:{nodes:mapNodes},
+  reportPreview:demoReportPreview,
+  settings:demoSettings,
+};
+
+function getDemoVehicleProfile(plate){
+  const normalized=String(plate||'').trim().toUpperCase();
+  const source=detections.find(d=>d.plate===normalized) || detections[0];
+  const matching=detections.filter(d=>d.plate===normalized);
+  const chosen=matching.length?matching: [source];
+  const trajectory=chosen.map((d,i)=>({
+    n:i+1,
+    camera_id:d.camera,
+    location:d.location,
+    timestamp:new Date(`2026-09-25T${d.time}`).toISOString(),
+    coords:mapNodes[i % mapNodes.length] ? [mapNodes[i % mapNodes.length].lat,mapNodes[i % mapNodes.length].lng] : [22.735,75.85],
+  }));
+  return {
+    plate:normalized || source.plate,
+    vehicle_type:source.type,
+    color:source.color,
+    first_seen:trajectory[0]?.timestamp,
+    last_seen:trajectory[trajectory.length-1]?.timestamp,
+    detection_count:chosen.length,
+    avg_confidence:Number(String(source.conf).replace('%','')),
+    is_blacklisted:source.plate==='MP09AB1234',
+    trajectory,
+  };
+}
+
 function normalizeCamera(c){return { ...c, count:c.vehicles_per_min ?? 0, speed:c.avg_speed_kmh ?? 0, plate:c.last_plate || '—' }}
 function normalizeAlert(a){return { ...a, camera:a.camera_id, time:a.created_at ? new Date(a.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—' }}
 function normalizeDetection(d){return { ...d, time:d.timestamp ? new Date(d.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—', camera:d.camera_id, location:d.camera_id, type:d.vehicle_type, conf:`${Number(d.confidence || 0).toFixed(1)}%` }}
@@ -56,42 +135,35 @@ function App(){
   const [searchOpen,setSearchOpen] = useState(false);
   const [live,setLive] = useState(true);
   const [selectedCamera,setSelectedCamera] = useState(null);
-  const [authenticated,setAuthenticated]=useState(true);
-  const [loading,setLoading]=useState(Boolean(getToken()));
-  const [apiError,setApiError]=useState('');
-  const [data,setData]=useState({cameras,detections,alerts,alertKpis:null,summary:null,analytics:null,gis:null,reportPreview:null,settings:null});
+  const [loading,setLoading] = useState(false);
+  const [data,setData] = useState(demoData);
 
-  const loadData=async()=>{
-    setLoading(true); setApiError('');
-    try {
-      const [cams,summary,activity,alertRows,alertKpis,analytics,gis,reportPreview,settings] = await Promise.all([
-        apiFetch('/api/cameras'), apiFetch('/api/dashboard/summary'), apiFetch('/api/dashboard/activity-feed?limit=10'),
-        apiFetch('/api/alerts'), apiFetch('/api/alerts/kpis'), apiFetch('/api/analytics?hours=24'),
-        apiFetch('/api/gis/snapshot'), apiFetch('/api/reports/preview'), apiFetch('/api/settings')
-      ]);
-      const normalizedCams=cams.map(normalizeCamera);
-      const cameraMap=Object.fromEntries(normalizedCams.map(c=>[c.id,c]));
-      const normalizedDetections=activity.map(d=>({...normalizeDetection(d),location:cameraMap[d.camera_id]?.location||d.camera_id}));
-      setData({cameras:normalizedCams,detections:normalizedDetections,alerts:alertRows.map(normalizeAlert),alertKpis,summary,analytics,gis,reportPreview,settings});
-      if (!selectedCamera && normalizedCams.length) setSelectedCamera(normalizedCams[0]);
-    } catch(err) { setApiError(err.message || 'Backend connection failed'); }
-    finally { setLoading(false); }
+  const loadData=()=>{
+    setLoading(true);
+    window.setTimeout(()=>{
+      setData({...demoData, cameras:demoData.cameras.map(c=>({...c}))});
+      setSelectedCamera(current=>current || demoData.cameras[0]);
+      setLoading(false);
+    },180);
   };
 
   useEffect(()=>{
-    const handler=()=>{setAuthenticated(false);setLoading(false);};
-    window.addEventListener('cityvision:unauthorized',handler);
-    window.addEventListener('cityvision:refresh',loadData);
-    if (authenticated) loadData(); else setLoading(false);
-    return ()=>{window.removeEventListener('cityvision:unauthorized',handler);window.removeEventListener('cityvision:refresh',loadData);};
-  },[authenticated]);
+    const handler=()=>loadData();
+    window.addEventListener('cityvision:refresh',handler);
+    setSelectedCamera(demoData.cameras[0]);
+    return ()=>window.removeEventListener('cityvision:refresh',handler);
+  },[]);
 
   useEffect(()=>{
-    if (!authenticated || !live) return;
-    const timer=setInterval(()=>loadData(),12000);
+    if(!live) return;
+    const timer=setInterval(()=>{
+      setData(current=>({
+        ...current,
+        summary:{...current.summary, vehicles_detected_today:current.summary.vehicles_detected_today + Math.floor(Math.random()*9)+1},
+      }));
+    },12000);
     return ()=>clearInterval(timer);
-  },[authenticated,live]);
-
+  },[live]);
 
   const pageKey = page;
   const currentUser=JSON.parse(localStorage.getItem('cityvision_user') || '{"username":"admin","role":"ADMIN"}');
@@ -104,10 +176,9 @@ function App(){
     </aside>
     <button className={`mobile-sidebar-backdrop ${collapsed?'hidden':''}`} aria-label="Close navigation" onClick={()=>setCollapsed(true)}/>
     <main className="main">
-      <header className="topbar"><button className="icon-btn" onClick={()=>setCollapsed(v=>!v)}><Menu size={19}/></button><div className="crumb"><span>SMART CITY</span><ChevronDown size={13}/><strong>{page}</strong></div><div className="top-actions"><div className="global-search nav-search"><Search size={16}/><input value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&globalSearch.trim()){setPage('GIS Traffic Map');const query=globalSearch.trim();setTimeout(()=>window.dispatchEvent(new CustomEvent('cityvision:location-search',{detail:{query}})),0);}}} placeholder="Search city, area or road..."/><button className="search-close" onClick={()=>setGlobalSearch('')} aria-label="Clear search">×</button></div><button className="icon-btn nav-search-btn active" aria-label="Search city, area or road" title="Search city, area or road"><Search size={18}/></button><button className="icon-btn"><Bell size={18}/><i/></button><button className="profile-btn" onClick={()=>{clearToken();setAuthenticated(false)}}><div className="avatar small">{(currentUser.username||'AD').slice(0,2).toUpperCase()}</div><span>{currentUser.username || 'Admin'}</span><LogOut size={14}/></button></div></header>
+      <header className="topbar"><button className="icon-btn" onClick={()=>setCollapsed(v=>!v)}><Menu size={19}/></button><div className="crumb"><span>SMART CITY</span><ChevronDown size={13}/><strong>{page}</strong></div><div className="top-actions"><div className="global-search nav-search"><Search size={16}/><input value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&globalSearch.trim()){setPage('GIS Traffic Map');const query=globalSearch.trim();setTimeout(()=>window.dispatchEvent(new CustomEvent('cityvision:location-search',{detail:{query}})),0);}}} placeholder="Search city, area or road..."/><button className="search-close" onClick={()=>setGlobalSearch('')} aria-label="Clear search">×</button></div><button className="icon-btn nav-search-btn active" aria-label="Search city, area or road" title="Search city, area or road"><Search size={18}/></button><button className="icon-btn"><Bell size={18}/><i/></button><button className="profile-btn" onClick={()=>{localStorage.removeItem('cityvision_token');setPage('Dashboard')}}><div className="avatar small">{(currentUser.username||'AD').slice(0,2).toUpperCase()}</div><span>{currentUser.username || 'Admin'}</span><LogOut size={14}/></button></div></header>
       <div className="page-wrap">
-        {apiError && <div className="backend-banner"><TriangleAlert size={15}/><span>Backend: {apiError}</span><button onClick={loadData}>Retry</button></div>}
-        {loading && <div className="backend-loading"><RefreshCw size={14}/> Syncing live backend data…</div>}
+        {loading && <div className="backend-loading"><RefreshCw size={14}/> Refreshing demo data…</div>}
         <AnimatePresence mode="wait"><motion.div key={pageKey} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} transition={{duration:.22}}>{renderPage(page,{live,setLive,selectedCamera,setSelectedCamera,setPage,data,loadData})}</motion.div></AnimatePresence>
       </div>
     </main>
@@ -125,11 +196,11 @@ function Dashboard({setPage,data}){
   const traffic=trend.length?trend:trafficTrend;
   const breakdown=summary?.camera_status_breakdown||{Online:312,Warning:9,Offline:7};
   return <section>
-    <div className="hero"><div><div className="eyebrow accent-text">CITY TRAFFIC OVERVIEW • LIVE BACKEND</div><h1>Command Center</h1><p>Unified visibility across ANPR, CCTV, vehicle movement and city traffic flow.</p></div><div className="hero-actions"><button className="btn ghost" onClick={()=>window.dispatchEvent(new Event('cityvision:refresh'))}><RefreshCw size={15}/>Refresh</button><button className="btn primary" onClick={()=>setPage('GIS Traffic Map')}><MapPinned size={15}/>Open Live Map</button></div></div>
-    <div className="metrics-grid"><Metric icon={Camera} label="ACTIVE CAMERAS" value={summary?.active_cameras||'—'} accent="blue"/><Metric icon={CarFront} label="VEHICLES DETECTED" value={summary?.vehicles_detected_today?.toLocaleString()||'—'} accent="violet"/><Metric icon={Gauge} label="AVG. VEHICLE SPEED" value={summary?`${summary.avg_speed_kmh} km/h`:'—'} accent="green"/><Metric icon={CircleAlert} label="ACTIVE ALERTS" value={summary?.active_alerts??'—'} accent="red" note="from backend"/></div>
+    <div className="hero"><div><div className="eyebrow accent-text">CITY TRAFFIC OVERVIEW • LIVE OPERATIONS</div><h1>Command Center</h1><p>Unified visibility across ANPR, CCTV, vehicle movement and city traffic flow.</p></div><div className="hero-actions"><button className="btn ghost" onClick={()=>window.dispatchEvent(new Event('cityvision:refresh'))}><RefreshCw size={15}/>Refresh</button><button className="btn primary" onClick={()=>setPage('GIS Traffic Map')}><MapPinned size={15}/>Open Live Map</button></div></div>
+    <div className="metrics-grid"><Metric icon={Camera} label="ACTIVE CAMERAS" value={summary?.active_cameras||'—'} accent="blue"/><Metric icon={CarFront} label="VEHICLES DETECTED" value={summary?.vehicles_detected_today?.toLocaleString()||'—'} accent="violet"/><Metric icon={Gauge} label="AVG. VEHICLE SPEED" value={summary?`${summary.avg_speed_kmh} km/h`:'—'} accent="green"/><Metric icon={CircleAlert} label="ACTIVE ALERTS" value={summary?.active_alerts??'—'} accent="red" note="demo data"/></div>
     <div className="dashboard-grid">
       <div className="card chart-card large"><SectionHead kicker="LIVE ANALYTICS" title="City Traffic Volume" action={<Pill tone="green"><span className="live-dot"/> LIVE</Pill>}/><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={traffic}><defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#57d7ff" stopOpacity=".28"/><stop offset="100%" stopColor="#57d7ff" stopOpacity="0"/></linearGradient></defs><CartesianGrid stroke="#1d2b34" vertical={false}/><XAxis dataKey="t" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis stroke="#6e7d88" tickLine={false} axisLine={false}/><Tooltip contentStyle={{background:'#0c151b',border:'1px solid #24343f',borderRadius:12}}/><Area type="monotone" dataKey="v" stroke="#57d7ff" strokeWidth={2.5} fill="url(#g1)"/></AreaChart></ResponsiveContainer></div></div>
-      <div className="card congestion"><SectionHead kicker="NETWORK STATUS" title="Congestion Index"/><div className="gauge"><div className="gauge-ring"><div><strong>{summary?.congestion_index??'—'}</strong><span>/100</span></div></div></div><div className="gauge-caption"><Pill tone="amber">{summary?.congestion_label||'—'}</Pill><span>Calculated by backend</span></div><div className="mini-rows">{(analytics?.bottlenecks||[]).slice(0,3).map(b=><div key={b.corridor}><span>{b.corridor}</span><b>{b.index}</b></div>)}</div></div>
+      <div className="card congestion"><SectionHead kicker="NETWORK STATUS" title="Congestion Index"/><div className="gauge"><div className="gauge-ring"><div><strong>{summary?.congestion_index??'—'}</strong><span>/100</span></div></div></div><div className="gauge-caption"><Pill tone="amber">{summary?.congestion_label||'—'}</Pill><span>Calculated from demo traffic data</span></div><div className="mini-rows">{(analytics?.bottlenecks||[]).slice(0,3).map(b=><div key={b.corridor}><span>{b.corridor}</span><b>{b.index}</b></div>)}</div></div>
       <div className="card activity-card"><SectionHead kicker="REAL-TIME FEED" title="Activity Feed" action={<button className="text-btn" onClick={()=>setPage('Vehicle Search & Tracking')}>Investigate</button>}/><div className="feed">{feed.map((d,i)=><div className="feed-item" key={d.id||i}><div className="feed-icon"><Fingerprint size={15}/></div><div><strong><span className="mono">{d.plate}</span> detected</strong><span>{d.camera} • {d.location||'Camera network'}</span></div><time>{d.time}</time></div>)}</div></div>
       <div className="card camera-overview"><SectionHead kicker="INFRASTRUCTURE" title="Camera Status" action={<button className="text-btn" onClick={()=>setPage('Camera Management')}>Manage</button>}/><div className="camera-bars">{Object.entries(breakdown).map(([l,n],i)=>{const c=l==='Online'?'green':l==='Warning'?'amber':'red';return <div key={l}><div className="row-label"><span><i className={`dot ${c}`}/>{l}</span><b>{n}</b></div><div className="bar"><i className={c} style={{width:`${summary?((n/(Object.values(breakdown).reduce((a,b)=>a+b,0)||1))*100):0}%`}}/></div></div>})}</div><div className="coverage"><Network size={14}/> <span>Network coverage</span><strong>{summary?.network_coverage_pct??'—'}%</strong></div></div>
     </div>
@@ -141,21 +212,34 @@ function LiveCameraFeed({live,setLive,selectedCamera,setSelectedCamera,data}){
   const filtered=data.cameras?.length?data.cameras:cameras;
   useEffect(()=>{
     if(!live) return;
-    const ws=new WebSocket(wsUrl('/ws/feed'));
-    ws.onmessage=e=>{try{const msg=JSON.parse(e.data);setEvents(prev=>[msg,...prev].slice(0,20));}catch{}};
-    ws.onerror=()=>{};
-    return ()=>ws.close();
+    let index=0;
+    const pushEvent=()=>{
+      const d=detections[index % detections.length];
+      setEvents(prev=>[{plate:d.plate,type:d.type,camera_id:d.camera,location:d.location,time:d.time},...prev].slice(0,20));
+      index+=1;
+    };
+    pushEvent();
+    const timer=setInterval(pushEvent,4000);
+    return ()=>clearInterval(timer);
   },[live]);
-  return <section><div className="hero compact"><div><div className="eyebrow accent-text">SURVEILLANCE NETWORK</div><h1>Live Camera Feed</h1><p>Camera inventory is loaded from FastAPI; live simulator events stream over WebSocket.</p></div><div className="hero-actions"><button className={`btn ${live?'danger-soft':'ghost'}`} onClick={()=>setLive(v=>!v)}>{live?<><Radio size={15}/>Live Mode</>:<><Clock3 size={15}/>Paused</>}</button></div></div><div className="camera-layout"><div className="camera-grid">{filtered.map((c,i)=><CameraCard key={c.id} c={c} i={i} onSelect={()=>setSelectedCamera(c)}/>)}</div><aside className="side-panel">{selectedCamera?<CameraDetails c={selectedCamera}/>:<div className="panel-empty"><Crosshair size={28}/><strong>Select a camera</strong><span>Choose any feed to inspect health, ANPR and recent detections.</span></div>}{events.length>0&&<div className="live-events"><span className="eyebrow">LATEST WS EVENT</span><code>{events[0].plate||events[0].type||'telemetry'} • {events[0].camera_id||'network'}</code></div>}</aside></div></section>
+  return <section><div className="hero compact"><div><div className="eyebrow accent-text">SURVEILLANCE NETWORK</div><h1>Live Camera Feed</h1><p>Camera inventory and live telemetry are running in local demo mode.</p></div><div className="hero-actions"><button className={`btn ${live?'danger-soft':'ghost'}`} onClick={()=>setLive(v=>!v)}>{live?<><Radio size={15}/>Live Mode</>:<><Clock3 size={15}/>Paused</>}</button></div></div><div className="camera-layout"><div className="camera-grid">{filtered.map((c,i)=><CameraCard key={c.id} c={c} i={i} onSelect={()=>setSelectedCamera(c)}/>)}</div><aside className="side-panel">{selectedCamera?<CameraDetails c={selectedCamera}/>:<div className="panel-empty"><Crosshair size={28}/><strong>Select a camera</strong><span>Choose any feed to inspect health, ANPR and recent detections.</span></div>}{events.length>0&&<div className="live-events"><span className="eyebrow">LATEST LIVE EVENT</span><code>{events[0].plate||events[0].type||'telemetry'} • {events[0].camera_id||'network'}</code></div>}</aside></div></section>
 }
 
 function CameraCard({c,i,onSelect}){return <motion.button className="camera-card" whileHover={{y:-3}} onClick={onSelect}><div className="video"><div className="scan-lines"/><div className="video-top"><span className="live-badge"><i/> LIVE</span><span className="camid">{c.id}</span><MoreHorizontal size={16}/></div><div className="fake-road"><div className="lane l1"/><div className="lane l2"/><div className="fake-car" style={{left:`${18+i*9}%`}}><span className="plate-overlay">{c.plate}</span></div></div><div className="video-bottom"><span><Navigation size={13}/>{c.location}</span><span>{new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span></div></div><div className="camera-meta"><div><strong>{c.type}</strong><span>{c.status==='Online'?'● Secure stream':'● '+c.status}</span></div><div className="cam-stats"><span><CarFront size={13}/>{c.count}/min</span><span><Gauge size={13}/>{c.speed} km/h</span></div></div></motion.button>}
 function CameraDetails({c}){return <div className="detail-panel"><div className="panel-head"><div><span className="eyebrow">CAMERA DETAILS</span><h3>{c.id}</h3></div><Pill tone={c.status==='Online'?'green':c.status==='Warning'?'amber':'red'}>{c.status}</Pill></div><div className="detail-map"><MapPinned size={22}/><span>{c.location}</span></div><div className="detail-grid"><div><span>Type</span><b>{c.type}</b></div><div><span>Vehicles / min</span><b>{c.count}</b></div><div><span>Avg. speed</span><b>{c.speed} km/h</b></div><div><span>ANPR</span><b>Enabled</b></div></div><div className="detail-section"><span className="eyebrow">LATEST PLATE</span><div className="plate-big">{c.plate}</div><div className="confidence"><span>Recognition confidence</span><b>98.7%</b></div><div className="confidence-bar"><i style={{width:'98.7%'}}/></div></div></div>}
 
 function VehicleTracking(){
-  const [q,setQ]=useState('MP09GD2713'); const [profile,setProfile]=useState(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(false);
-  const searchVehicle=async()=>{setLoading(true);setError('');try{setProfile(await apiFetch(`/api/vehicles/search/${encodeURIComponent(q.trim())}`));}catch(e){setProfile(null);setError(e.message);}finally{setLoading(false)}};
-  return <section><div className="hero compact"><div><div className="eyebrow accent-text">INVESTIGATION CONSOLE</div><h1>Vehicle Search & Tracking</h1><p>Search the backend detection history and reconstruct plate trajectories.</p></div></div><div className="search-card card"><Search size={19}/><input value={q} onChange={e=>setQ(e.target.value.toUpperCase())} placeholder="Enter registration number"/><button className="btn primary" onClick={searchVehicle} disabled={loading}><SearchCheck size={15}/>{loading?'Searching…':'Search Vehicle'}</button><button className="icon-btn" onClick={()=>setQ('MP09GD2713')}><RefreshCw size={18}/></button></div>{error&&<div className="backend-banner"><TriangleAlert size={15}/><span>{error}</span></div>}{profile&&<div className="tracking-grid"><div className="card vehicle-card"><div className="panel-head"><div><span className="eyebrow">VEHICLE PROFILE</span><h3>{profile.plate}</h3></div><Pill tone={profile.is_blacklisted?'red':'green'}>{profile.is_blacklisted?'BLACKLISTED':'CLEAR'}</Pill></div><div className="vehicle-visual"><div className="vehicle-silhouette">🚘</div><div className="plate-big">{profile.plate}</div></div><div className="vehicle-specs"><div><span>Type</span><b>{profile.vehicle_type}</b></div><div><span>Color</span><b>{profile.color}</b></div><div><span>First seen</span><b>{profile.first_seen?new Date(profile.first_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Last seen</span><b>{profile.last_seen?new Date(profile.last_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Detections</span><b>{profile.detection_count}</b></div><div><span>Confidence</span><b>{profile.avg_confidence}%</b></div></div><div className="action-row"><button className="btn ghost"><Download size={14}/>Export Trail</button><button className="btn danger"><ShieldAlert size={14}/>Create Alert</button></div></div><div className="card trajectory-card"><SectionHead kicker="SPATIAL-TEMPORAL TRACE" title="Trajectory" action={<Pill tone="green"><span className="live-dot"/> {profile.trajectory.length} sightings</Pill>}/><TrajectoryMap points={profile.trajectory}/><div className="timeline">{profile.trajectory.map((x,i)=><div key={`${x.camera_id}-${i}`} className="timeline-item"><div className="tl-dot">{x.n}</div><div><strong>{x.location}</strong><span>{new Date(x.timestamp).toLocaleTimeString('en-IN')} • {x.camera_id}</span></div></div>)}</div></div></div>}</section>
+  const [q,setQ]=useState('MP09AB1234'); const [profile,setProfile]=useState(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(false);
+  const searchVehicle=()=>{
+    setLoading(true);
+    setError('');
+    window.setTimeout(()=>{
+      const result=getDemoVehicleProfile(q);
+      if(result){setProfile(result);}else{setProfile(null);setError('Vehicle not found in demo data.');}
+      setLoading(false);
+    },180);
+  };
+  return <section><div className="hero compact"><div><div className="eyebrow accent-text">INVESTIGATION CONSOLE</div><h1>Vehicle Search & Tracking</h1><p>Search the local demo detection history and reconstruct plate trajectories.</p></div></div><div className="search-card card"><Search size={19}/><input value={q} onChange={e=>setQ(e.target.value.toUpperCase())} placeholder="Enter registration number"/><button className="btn primary" onClick={searchVehicle} disabled={loading}><SearchCheck size={15}/>{loading?'Searching…':'Search Vehicle'}</button><button className="icon-btn" onClick={()=>setQ('MP09AB1234')}><RefreshCw size={18}/></button></div>{error&&<div className="backend-banner"><TriangleAlert size={15}/><span>{error}</span></div>}{profile&&<div className="tracking-grid"><div className="card vehicle-card"><div className="panel-head"><div><span className="eyebrow">VEHICLE PROFILE</span><h3>{profile.plate}</h3></div><Pill tone={profile.is_blacklisted?'red':'green'}>{profile.is_blacklisted?'BLACKLISTED':'CLEAR'}</Pill></div><div className="vehicle-visual"><div className="vehicle-silhouette">🚘</div><div className="plate-big">{profile.plate}</div></div><div className="vehicle-specs"><div><span>Type</span><b>{profile.vehicle_type}</b></div><div><span>Color</span><b>{profile.color}</b></div><div><span>First seen</span><b>{profile.first_seen?new Date(profile.first_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Last seen</span><b>{profile.last_seen?new Date(profile.last_seen).toLocaleTimeString('en-IN'): '—'}</b></div><div><span>Detections</span><b>{profile.detection_count}</b></div><div><span>Confidence</span><b>{profile.avg_confidence}%</b></div></div><div className="action-row"><button className="btn ghost"><Download size={14}/>Export Trail</button><button className="btn danger"><ShieldAlert size={14}/>Create Alert</button></div></div><div className="card trajectory-card"><SectionHead kicker="SPATIAL-TEMPORAL TRACE" title="Trajectory" action={<Pill tone="green"><span className="live-dot"/> {profile.trajectory.length} sightings</Pill>}/><TrajectoryMap points={profile.trajectory}/><div className="timeline">{profile.trajectory.map((x,i)=><div key={`${x.camera_id}-${i}`} className="timeline-item"><div className="tl-dot">{x.n}</div><div><strong>{x.location}</strong><span>{new Date(x.timestamp).toLocaleTimeString('en-IN')} • {x.camera_id}</span></div></div>)}</div></div></div>}</section>
 }
 
 function TrajectoryMap({points=[]}){
@@ -279,7 +363,7 @@ function GISMap({data}){
   const [layer,setLayer]=useState('Traffic'); const [locationSearch,setLocationSearch]=useState(''); const locateRef=React.useRef(null);
   useEffect(()=>{ const handler=e=>setLocationSearch(e.detail?.query||''); window.addEventListener('cityvision:location-search',handler); return ()=>window.removeEventListener('cityvision:location-search',handler); },[]);
   const snapshot=data.gis; const nodes=(snapshot?.nodes||[]).map(n=>({lat:n.lat,lng:n.lng,label:n.camera_id,status:n.status,name:n.name}));
-  return <section><div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Live network snapshot and camera nodes from the FastAPI GIS service.</p></div><div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>locateRef.current&&locateRef.current()}><LocateFixed size={15}/>Locate me</button></div></div><div className="gis-layout"><div className="gis-map osm-map"><OSMMap layer={layer} nodes={nodes.length?nodes:mapNodes} searchQuery={locationSearch} onReady={fn=>{locateRef.current=fn}}/><div className="map-controls"><button title="OpenStreetMap"><Map size={16}/></button><button title="Map layers"><Layers3 size={16}/></button><button title="Fullscreen" onClick={()=>document.querySelector('.osm-map')?.requestFullscreen?.()}><Maximize2 size={16}/></button></div><div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div></div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>{snapshot?.congested_corridors??'—'}</b></div><div className="map-stat"><span>Active incidents</span><b>{snapshot?.active_incidents??'—'}</b></div><div className="map-stat"><span>Vehicles on network</span><b>{snapshot?.vehicles_on_network?.toLocaleString()??'—'}</b></div><div className="map-stat"><span>Camera coverage</span><b>{snapshot?.camera_coverage_pct??'—'}%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTES</span>{(snapshot?.routes||[]).map(r=><div className="route-card" key={r.name}><Route size={17}/><div><strong>{r.name}</strong><span>{r.distance_km} km • {r.eta_minutes} min • {r.congestion}</span></div></div>)}</aside></div></section>
+  return <section><div className="hero compact"><div><div className="eyebrow accent-text">GEOSPATIAL OPERATIONS</div><h1>GIS Traffic Map</h1><p>Live network snapshot and camera nodes from the local demo dataset.</p></div><div className="hero-actions"><div className="segmented">{['Traffic','Cameras','Routes'].map(x=><button key={x} className={layer===x?'active':''} onClick={()=>setLayer(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>locateRef.current&&locateRef.current()}><LocateFixed size={15}/>Locate me</button></div></div><div className="gis-layout"><div className="gis-map osm-map"><OSMMap layer={layer} nodes={nodes.length?nodes:mapNodes} searchQuery={locationSearch} onReady={fn=>{locateRef.current=fn}}/><div className="map-controls"><button title="OpenStreetMap"><Map size={16}/></button><button title="Map layers"><Layers3 size={16}/></button><button title="Fullscreen" onClick={()=>document.querySelector('.osm-map')?.requestFullscreen?.()}><Maximize2 size={16}/></button></div><div className="map-search"><Search size={15}/><input placeholder="Search area or junction"/></div><div className="legend"><strong>LIVE TRAFFIC</strong><span><i className="green"/> Low</span><span><i className="amber"/> Moderate</span><span><i className="red"/> Heavy</span></div></div><aside className="gis-side card"><SectionHead kicker="NETWORK SNAPSHOT" title="Live State"/><div className="map-stat"><span>Congested corridors</span><b>{snapshot?.congested_corridors??'—'}</b></div><div className="map-stat"><span>Active incidents</span><b>{snapshot?.active_incidents??'—'}</b></div><div className="map-stat"><span>Vehicles on network</span><b>{snapshot?.vehicles_on_network?.toLocaleString()??'—'}</b></div><div className="map-stat"><span>Camera coverage</span><b>{snapshot?.camera_coverage_pct??'—'}%</b></div><div className="side-divider"/><span className="eyebrow">SELECTED ROUTES</span>{(snapshot?.routes||[]).map(r=><div className="route-card" key={r.name}><Route size={17}/><div><strong>{r.name}</strong><span>{r.distance_km} km • {r.eta_minutes} min • {r.congestion}</span></div></div>)}</aside></div></section>
 }
 
 function Analytics({data}){
@@ -290,13 +374,13 @@ function Analytics({data}){
 function Alerts({data}){const [filter,setFilter]=useState('All'); const rows=filter==='All'?data.alerts:(data.alerts||[]).filter(a=>a.severity===filter); const k=data.alertKpis; return <section><div className="hero compact"><div><div className="eyebrow accent-text">SECURITY & INCIDENTS</div><h1>Alerts</h1><p>High-priority events from the citywide alert service.</p></div></div><div className="alert-kpis"><Metric icon={CircleAlert} label="OPEN" value={k?.open??'—'} accent="red"/><Metric icon={TriangleAlert} label="INVESTIGATING" value={k?.investigating??'—'} accent="amber"/><Metric icon={CheckCircle2} label="RESOLVED TODAY" value={k?.resolved_today??'—'} accent="green"/><Metric icon={ShieldAlert} label="BLACKLIST MATCHES" value={k?.blacklist_matches??'—'} accent="violet"/></div><div className="card table-card"><div className="table-toolbar"><div className="segmented">{['All','Critical','High','Medium','Low'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{x}</button>)}</div><button className="btn ghost" onClick={()=>window.dispatchEvent(new Event('cityvision:refresh'))}><RefreshCw size={15}/>Refresh</button></div><table><thead><tr><th>ALERT</th><th>VEHICLE</th><th>SOURCE</th><th>LOCATION</th><th>TIME</th><th>STATUS</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><div className="alert-name"><span className={`sev ${a.severity.toLowerCase()}`}/><div><strong>{a.title}</strong><span>{a.id} • {a.severity}</span></div></div></td><td><span className="mono">{a.plate}</span></td><td><span className="mono">{a.camera}</span></td><td>{a.location}</td><td className="mono">{a.time}</td><td><Pill tone={a.status==='Resolved'?'green':a.status==='Investigating'?'amber':'red'}>{a.status}</Pill></td></tr>)}</tbody></table></div></section>}
 
 
-function CameraManagement({data}){const [q,setQ]=useState(''); const rows=(data.cameras||cameras).filter(c=>!q||c.id.toLowerCase().includes(q.toLowerCase())||c.location.toLowerCase().includes(q.toLowerCase())); return <section><div className="hero compact"><div><div className="eyebrow accent-text">INFRASTRUCTURE CONTROL</div><h1>Camera Management</h1><p>Monitor device health, connectivity, placement and ANPR capability from the backend.</p></div><div className="hero-actions"><button className="btn primary"><Camera size={15}/>Register Camera</button></div></div><div className="camera-management-grid"><div className="card table-card"><div className="table-toolbar"><div className="global-search compact-search"><Search size={15}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search camera or location"/></div><div className="segmented"><button className="active">All {rows.length}</button></div></div><table><thead><tr><th>CAMERA</th><th>LOCATION</th><th>TYPE</th><th>STATUS</th><th>LAST ACTIVE</th><th>HEALTH</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}><td><div className="camera-id"><Camera size={15}/><span><strong>{c.id}</strong><small>{c.ip_address||'No IP'}</small></span></div></td><td>{c.location}</td><td>{c.type}</td><td><Pill tone={c.status==='Online'?'green':c.status==='Warning'?'amber':'red'}>{c.status}</Pill></td><td className="mono">{c.last_active?new Date(c.last_active).toLocaleTimeString('en-IN'):'—'}</td><td><div className="health"><div className="bar"><i className={c.status==='Offline'?'red':c.status==='Warning'?'amber':'green'} style={{width:`${c.health_pct||0}%`}}/></div><span>{c.health_pct ?? 0}%</span></div></td></tr>)}</tbody></table></div><aside className="card infra-side"><SectionHead kicker="CITY NETWORK" title="Infrastructure Health"/><div className="server-state"><Server size={19}/><div><strong>Control Core</strong><span>FastAPI backend connected</span></div><CheckCircle2 size={17} className="ok"/></div><div className="server-state"><Database size={19}/><div><strong>Camera Data</strong><span>{rows.length} cameras loaded</span></div><CheckCircle2 size={17} className="ok"/></div><div className="server-state"><Zap size={19}/><div><strong>Simulator</strong><span>Live demo telemetry</span></div><CheckCircle2 size={17} className="ok"/></div></aside></div></section>}
+function CameraManagement({data}){const [q,setQ]=useState(''); const rows=(data.cameras||cameras).filter(c=>!q||c.id.toLowerCase().includes(q.toLowerCase())||c.location.toLowerCase().includes(q.toLowerCase())); return <section><div className="hero compact"><div><div className="eyebrow accent-text">INFRASTRUCTURE CONTROL</div><h1>Camera Management</h1><p>Monitor device health, connectivity, placement and ANPR capability from the local demo dataset.</p></div><div className="hero-actions"><button className="btn primary"><Camera size={15}/>Register Camera</button></div></div><div className="camera-management-grid"><div className="card table-card"><div className="table-toolbar"><div className="global-search compact-search"><Search size={15}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search camera or location"/></div><div className="segmented"><button className="active">All {rows.length}</button></div></div><table><thead><tr><th>CAMERA</th><th>LOCATION</th><th>TYPE</th><th>STATUS</th><th>LAST ACTIVE</th><th>HEALTH</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}><td><div className="camera-id"><Camera size={15}/><span><strong>{c.id}</strong><small>{c.ip_address||'No IP'}</small></span></div></td><td>{c.location}</td><td>{c.type}</td><td><Pill tone={c.status==='Online'?'green':c.status==='Warning'?'amber':'red'}>{c.status}</Pill></td><td className="mono">{c.last_active?new Date(c.last_active).toLocaleTimeString('en-IN'):'—'}</td><td><div className="health"><div className="bar"><i className={c.status==='Offline'?'red':c.status==='Warning'?'amber':'green'} style={{width:`${c.health_pct||0}%`}}/></div><span>{c.health_pct ?? 0}%</span></div></td></tr>)}</tbody></table></div><aside className="card infra-side"><SectionHead kicker="CITY NETWORK" title="Infrastructure Health"/><div className="server-state"><Server size={19}/><div><strong>Control Core</strong><span>Demo control core active</span></div><CheckCircle2 size={17} className="ok"/></div><div className="server-state"><Database size={19}/><div><strong>Camera Data</strong><span>{rows.length} cameras loaded</span></div><CheckCircle2 size={17} className="ok"/></div><div className="server-state"><Zap size={19}/><div><strong>Simulator</strong><span>Local demo telemetry</span></div><CheckCircle2 size={17} className="ok"/></div></aside></div></section>}
 
 
-function Reports({data}){const p=data.reportPreview; return <section><div className="hero compact"><div><div className="eyebrow accent-text">REPORTING CENTER</div><h1>Reports</h1><p>Generate auditable traffic, vehicle, camera and incident reports.</p></div><div className="hero-actions"><button className="btn primary"><FileDown size={15}/>Generate Report</button></div></div><div className="reports-grid">{[['Traffic Flow Report','Traffic volumes, speeds and corridor congestion','BarChart3'],['Vehicle Detection Report','ANPR detections and camera-wise sightings','Fingerprint'],['Camera Health Report','Availability, uptime and device health','Camera'],['Alert Incident Report','Open, investigated and resolved incidents','ShieldAlert']].map(([title,desc,ico],i)=>{const I={BarChart3,Fingerprint,Camera,ShieldAlert}[ico];return <motion.div className="report-card card" key={title} whileHover={{y:-4}}><div className="report-icon"><I size={20}/></div><div><span className="eyebrow">REPORT 0{i+1}</span><h3>{title}</h3><p>{desc}</p></div><div className="report-foot"><span>Backend report service</span><button className="icon-btn"><ArrowUpRight size={16}/></button></div></motion.div>})}</div><div className="card report-preview"><SectionHead kicker="REPORT PREVIEW" title={p?.title||'Daily Traffic Intelligence'} action={<button className="btn ghost"><Download size={15}/>Export CSV</button>}/><div className="preview-grid"><div><span>Vehicles detected</span><strong>{p?.vehicles_detected??'—'}</strong></div><div><span>Peak volume</span><strong>{p?.peak_volume_per_hr??'—'} / hr</strong></div><div><span>Avg speed</span><strong>{p?.avg_speed_kmh??'—'} km/h</strong></div><div><span>Alerts triggered</span><strong>{p?.alerts_triggered??'—'}</strong></div></div><div className="preview-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={p?.trend?.map(x=>({t:x.t,v:x.v}))||trafficTrend}><defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#b18cff" stopOpacity=".24"/><stop offset="100%" stopColor="#b18cff" stopOpacity="0"/></linearGradient></defs><XAxis dataKey="t" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis stroke="#6e7d88" tickLine={false} axisLine={false}/><Area type="monotone" dataKey="v" stroke="#b18cff" strokeWidth={2.5} fill="url(#g3)"/></AreaChart></ResponsiveContainer></div></div></section>}
+function Reports({data}){const p=data.reportPreview; return <section><div className="hero compact"><div><div className="eyebrow accent-text">REPORTING CENTER</div><h1>Reports</h1><p>Generate auditable traffic, vehicle, camera and incident reports.</p></div><div className="hero-actions"><button className="btn primary"><FileDown size={15}/>Generate Report</button></div></div><div className="reports-grid">{[['Traffic Flow Report','Traffic volumes, speeds and corridor congestion','BarChart3'],['Vehicle Detection Report','ANPR detections and camera-wise sightings','Fingerprint'],['Camera Health Report','Availability, uptime and device health','Camera'],['Alert Incident Report','Open, investigated and resolved incidents','ShieldAlert']].map(([title,desc,ico],i)=>{const I={BarChart3,Fingerprint,Camera,ShieldAlert}[ico];return <motion.div className="report-card card" key={title} whileHover={{y:-4}}><div className="report-icon"><I size={20}/></div><div><span className="eyebrow">REPORT 0{i+1}</span><h3>{title}</h3><p>{desc}</p></div><div className="report-foot"><span>Local report service</span><button className="icon-btn"><ArrowUpRight size={16}/></button></div></motion.div>})}</div><div className="card report-preview"><SectionHead kicker="REPORT PREVIEW" title={p?.title||'Daily Traffic Intelligence'} action={<button className="btn ghost"><Download size={15}/>Export CSV</button>}/><div className="preview-grid"><div><span>Vehicles detected</span><strong>{p?.vehicles_detected??'—'}</strong></div><div><span>Peak volume</span><strong>{p?.peak_volume_per_hr??'—'} / hr</strong></div><div><span>Avg speed</span><strong>{p?.avg_speed_kmh??'—'} km/h</strong></div><div><span>Alerts triggered</span><strong>{p?.alerts_triggered??'—'}</strong></div></div><div className="preview-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={p?.trend?.map(x=>({t:x.t,v:x.v}))||trafficTrend}><defs><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#b18cff" stopOpacity=".24"/><stop offset="100%" stopColor="#b18cff" stopOpacity="0"/></linearGradient></defs><XAxis dataKey="t" stroke="#6e7d88" tickLine={false} axisLine={false}/><YAxis stroke="#6e7d88" tickLine={false} axisLine={false}/><Area type="monotone" dataKey="v" stroke="#b18cff" strokeWidth={2.5} fill="url(#g3)"/></AreaChart></ResponsiveContainer></div></div></section>}
 
 
-function Settings({data}){const s=data.settings; const items=[['User Profile','Manage operator identity and access details',UserRound],['System Preferences','Language, time zone and data refresh behavior',MonitorCog],['Notification Settings','Configure push, email and control-room notifications',Bell],['Alert Preferences','Severity thresholds and routing rules',ShieldAlert],['Map Preferences','Default layers, labels and map behavior',MapIcon],['Camera Settings','Stream quality, ANPR and device defaults',Camera],['Security Settings','Session security, MFA and audit policies',LockKeyhole],['Theme Settings','Interface density and command-center appearance',Palette]]; return <section><div className="hero compact"><div><div className="eyebrow accent-text">SYSTEM CONFIGURATION</div><h1>Settings</h1><p>Backend settings are loaded from the authenticated API.</p></div></div><div className="settings-grid">{items.map(([title,desc,I])=><motion.button className="setting-item card" key={title} whileHover={{x:3}}><div className="setting-icon"><I size={18}/></div><div><strong>{title}</strong><span>{desc}</span></div><ChevronDown size={16}/></motion.button>)}</div><div className="card preferences"><SectionHead kicker="ACTIVE CONFIGURATION" title="Operations Profile"/><div className="pref-row"><div><strong>Operations Mode</strong><span>{s?.operations_mode||'—'}</span></div><Pill tone="green">ACTIVE</Pill></div><div className="pref-row"><div><strong>Data Refresh</strong><span>Live telemetry refresh interval</span></div><b>{s?.data_refresh_seconds??'—'} seconds</b></div><div className="pref-row"><div><strong>Security Level</strong><span>Access policies for control-room users</span></div><b>{s?.security_level||'—'}</b></div><div className="pref-row"><div><strong>Default Map</strong><span>Traffic + Cameras + Incidents</span></div><b>{s?.default_map_layers?.join(' + ')||'—'}</b></div></div></section>}
+function Settings({data}){const s=data.settings; const items=[['User Profile','Manage operator identity and access details',UserRound],['System Preferences','Language, time zone and data refresh behavior',MonitorCog],['Notification Settings','Configure push, email and control-room notifications',Bell],['Alert Preferences','Severity thresholds and routing rules',ShieldAlert],['Map Preferences','Default layers, labels and map behavior',MapIcon],['Camera Settings','Stream quality, ANPR and device defaults',Camera],['Security Settings','Session security, MFA and audit policies',LockKeyhole],['Theme Settings','Interface density and command-center appearance',Palette]]; return <section><div className="hero compact"><div><div className="eyebrow accent-text">SYSTEM CONFIGURATION</div><h1>Settings</h1><p>Settings are loaded from the local demo configuration.</p></div></div><div className="settings-grid">{items.map(([title,desc,I])=><motion.button className="setting-item card" key={title} whileHover={{x:3}}><div className="setting-icon"><I size={18}/></div><div><strong>{title}</strong><span>{desc}</span></div><ChevronDown size={16}/></motion.button>)}</div><div className="card preferences"><SectionHead kicker="ACTIVE CONFIGURATION" title="Operations Profile"/><div className="pref-row"><div><strong>Operations Mode</strong><span>{s?.operations_mode||'—'}</span></div><Pill tone="green">ACTIVE</Pill></div><div className="pref-row"><div><strong>Data Refresh</strong><span>Live telemetry refresh interval</span></div><b>{s?.data_refresh_seconds??'—'} seconds</b></div><div className="pref-row"><div><strong>Security Level</strong><span>Access policies for control-room users</span></div><b>{s?.security_level||'—'}</b></div><div className="pref-row"><div><strong>Default Map</strong><span>Traffic + Cameras + Incidents</span></div><b>{s?.default_map_layers?.join(' + ')||'—'}</b></div></div></section>}
 
 
 function renderPage(page,props){switch(page){case 'Dashboard':return <Dashboard {...props}/>;case 'Live Camera Feed':return <LiveCameraFeed {...props}/>;case 'Vehicle Search & Tracking':return <VehicleTracking {...props}/>;case 'GIS Traffic Map':return <GISMap {...props}/>;case 'Traffic Analytics':return <Analytics {...props}/>;case 'Alerts':return <Alerts {...props}/>;case 'Camera Management':return <CameraManagement {...props}/>;case 'Reports':return <Reports {...props}/>;case 'Settings':return <Settings {...props}/>;default:return <Dashboard {...props}/>}}
